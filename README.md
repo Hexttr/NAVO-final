@@ -6,7 +6,7 @@ AI-powered radio station for Eastern/Tajik music. Admin panel for content manage
 
 - **Backend:** Python, FastAPI, SQLite
 - **Frontend:** React, Vite
-- **Streaming:** FFmpeg → Icecast
+- **Streaming:** FFmpeg subprocess (HTTP stream) или Icecast
 
 ## Setup
 
@@ -25,7 +25,9 @@ cd frontend && npm install
 
 2. Copy `.env.example` to `.env` and fill in API keys.
 
-3. Run:
+3. **FFmpeg** — для стриминга эфира (`/stream`). Установите: https://ffmpeg.org/download.html
+
+4. Run:
 
 ```bash
 # Terminal 1 - Backend

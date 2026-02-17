@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
-from models import BroadcastItem
+from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
 
@@ -21,6 +21,103 @@ class InsertEntity(BaseModel):
     entity_id: int
 
 
+@router.get("/playlist-urls")
+def get_playlist_urls(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    sync: bool = Query(True, description="Синхронизация по Москве"),
+    db: Session = Depends(get_db),
+):
+    """Плейлист для последовательного воспроизведения на фронте. Возвращает {items, startIndex}."""
+    from datetime import datetime, timezone, timedelta
+
+    items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == d,
+            BroadcastItem.entity_type != "empty",
+        )
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    base = "http://localhost:8000/api"
+    result = []
+    for it in items:
+        rec = {"url": "", "type": it.entity_type, "entity_id": it.entity_id}
+        if it.entity_type == "song":
+            rec["url"] = f"{base}/songs/{it.entity_id}/audio"
+        elif it.entity_type == "dj":
+            rec["url"] = f"{base}/songs/{it.entity_id}/dj-audio"
+        elif it.entity_type == "news":
+            rec["url"] = f"{base}/news/{it.entity_id}/audio"
+        elif it.entity_type == "weather":
+            rec["url"] = f"{base}/weather/{it.entity_id}/audio"
+        elif it.entity_type == "podcast":
+            rec["url"] = f"{base}/podcasts/{it.entity_id}/audio"
+        elif it.entity_type == "intro":
+            rec["url"] = f"{base}/intros/{it.entity_id}/audio"
+        if rec["url"]:
+            result.append(rec)
+    start_index = 0
+    if sync and result:
+        now = datetime.now(timezone(timedelta(hours=3)))
+        now_sec = now.hour * 3600 + now.minute * 60 + now.second
+        for i, it in enumerate(items):
+            parts = (it.start_time or "00:00:00").split(":")
+            start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
+            end_sec = start_sec + int(it.duration_seconds or 0)
+            if start_sec <= now_sec < end_sec:
+                start_index = i
+                break
+            if now_sec < start_sec:
+                start_index = i
+                break
+    return {"date": str(d), "items": result, "startIndex": start_index}
+
+
+@router.get("/now-playing")
+def get_now_playing(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Текущий трек по расписанию (Москва UTC+3). Для подсветки в сетке эфира."""
+    from datetime import datetime, timezone, timedelta
+
+    items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == d,
+            BroadcastItem.entity_type != "empty",
+        )
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    if not items:
+        return {"entityType": None, "entityId": None}
+    now = datetime.now(timezone(timedelta(hours=3)))
+    now_sec = now.hour * 3600 + now.minute * 60 + now.second
+    for it in items:
+        parts = (it.start_time or "00:00:00").split(":")
+        start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
+        end_sec = start_sec + int(it.duration_seconds or 0)
+        if start_sec <= now_sec < end_sec:
+            return {"entityType": it.entity_type, "entityId": it.entity_id}
+    return {"entityType": None, "entityId": None}
+
+
+def _get_entity_text(db: Session, entity_type: str, entity_id: int) -> str | None:
+    """Текст для DJ, новостей, погоды."""
+    if entity_type == "dj":
+        s = db.query(Song).filter(Song.id == entity_id).first()
+        return s.dj_text if s else None
+    if entity_type == "news":
+        n = db.query(News).filter(News.id == entity_id).first()
+        return n.text if n else None
+    if entity_type == "weather":
+        w = db.query(Weather).filter(Weather.id == entity_id).first()
+        return w.text if w else None
+    return None
+
+
 @router.get("")
 def get_broadcast(
     d: date = Query(..., description="Date YYYY-MM-DD"),
@@ -32,7 +129,24 @@ def get_broadcast(
         .order_by(BroadcastItem.sort_order)
         .all()
     )
-    return {"date": str(d), "items": items}
+    result = []
+    for it in items:
+        rec = {
+            "id": it.id,
+            "entity_type": it.entity_type,
+            "entity_id": it.entity_id,
+            "start_time": it.start_time,
+            "end_time": it.end_time,
+            "duration_seconds": it.duration_seconds,
+            "sort_order": it.sort_order,
+            "metadata_json": it.metadata_json,
+        }
+        if it.entity_type in ("dj", "news", "weather"):
+            rec["text"] = _get_entity_text(db, it.entity_type, it.entity_id) or ""
+        else:
+            rec["text"] = None
+        result.append(rec)
+    return {"date": str(d), "items": result}
 
 
 @router.post("/generate")

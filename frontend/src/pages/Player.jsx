@@ -1,33 +1,68 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef } from "react";
 import { Link } from "react-router-dom";
+import { getBroadcastPlaylistUrls } from "../api";
 import "./Player.css";
 
 const API_BASE = "http://localhost:8000";
 
 export default function Player() {
   const [playing, setPlaying] = useState(false);
-  const [streamDate, setStreamDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [fromStart, setFromStart] = useState(false);
-  const [useTestStream, setUseTestStream] = useState(true);
+  const [items, setItems] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
   const audioRef = useRef(null);
 
-  const streamUrl = useMemo(() => {
-    if (useTestStream) {
-      return `${API_BASE}/stream-test?d=${streamDate}`;
-    }
-    return `${API_BASE}/stream?d=${streamDate}${fromStart ? "&from_start=1" : ""}`;
-  }, [streamDate, fromStart, useTestStream]);
-
-  const togglePlay = () => {
-    if (!audioRef.current) return;
+  const togglePlay = async () => {
     setError(null);
     if (playing) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch((e) => setError("Не удалось воспроизвести. Проверьте, что эфир сгенерирован."));
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
     }
-    setPlaying(!playing);
+    if (items.length === 0) {
+      setLoading(true);
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const { items: fetched, startIndex } = await getBroadcastPlaylistUrls(today, true);
+        if (!fetched?.length) {
+          setError("Нет эфира на сегодня. Сгенерируйте эфир в админке.");
+          setLoading(false);
+          return;
+        }
+        setItems(fetched);
+        setCurrentIndex(startIndex);
+        const item = fetched[startIndex];
+        const fullUrl = item?.url?.startsWith("http") ? item.url : `${API_BASE}${item?.url || ""}`;
+        audioRef.current.src = fullUrl;
+        audioRef.current.play().catch((e) => setError("Не удалось воспроизвести"));
+        setPlaying(true);
+      } catch (e) {
+        setError(e.message || "Не удалось загрузить плейлист");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    const item = items[currentIndex];
+    if (!item?.url) return;
+    const fullUrl = item.url.startsWith("http") ? item.url : `${API_BASE}${item.url}`;
+    audioRef.current.src = fullUrl;
+    audioRef.current.play().catch((e) => setError("Не удалось воспроизвести"));
+    setPlaying(true);
+  };
+
+  const handleEnded = () => {
+    if (items.length <= 1) {
+      setPlaying(false);
+      return;
+    }
+    const nextIndex = currentIndex + 1 >= items.length ? 0 : currentIndex + 1;
+    setCurrentIndex(nextIndex);
+    const item = items[nextIndex];
+    const fullUrl = item?.url?.startsWith("http") ? item.url : `${API_BASE}${item?.url || ""}`;
+    audioRef.current.src = fullUrl;
+    audioRef.current.play().catch((e) => setError("Не удалось воспроизвести"));
   };
 
   return (
@@ -36,53 +71,15 @@ export default function Player() {
         <h1 className="logo">NAVO RADIO</h1>
         <p className="tagline">Восточная музыка • Душанбе</p>
       </div>
-      <div className="player-date">
-        <label htmlFor="stream-date">Эфир на дату:</label>
-        <input
-          id="stream-date"
-          type="date"
-          value={streamDate}
-          onChange={(e) => {
-            setStreamDate(e.target.value);
-            setPlaying(false);
-          }}
-          className="date-picker"
-        />
-      </div>
-      <div className="player-sync">
-        <label>
-          <input
-            type="checkbox"
-            checked={fromStart}
-            onChange={(e) => {
-              setFromStart(e.target.checked);
-              setPlaying(false);
-            }}
-          />
-          С начала дня (иначе — с текущего времени по Москве)
-        </label>
-      </div>
       <div className="player-control">
         <button
           className={`play-btn ${playing ? "playing" : ""}`}
           onClick={togglePlay}
+          disabled={loading}
           aria-label={playing ? "Stop" : "Play"}
         >
-          {playing ? "⏸" : "▶"}
+          {loading ? "…" : playing ? "⏸" : "▶"}
         </button>
-      </div>
-      <div className="player-sync">
-        <label>
-          <input
-            type="checkbox"
-            checked={useTestStream}
-            onChange={(e) => {
-              setUseTestStream(e.target.checked);
-              setPlaying(false);
-            }}
-          />
-          Тест (один файл) — пока основной стрим не работает
-        </label>
       </div>
       <p className="player-hint">
         {playing ? "Слушайте эфир" : "Нажмите Play для прослушивания"}
@@ -92,13 +89,11 @@ export default function Player() {
         Админ-панель
       </Link>
       <audio
-        key={streamUrl}
         ref={audioRef}
-        src={streamUrl}
-        onEnded={() => setPlaying(false)}
+        onEnded={handleEnded}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onError={() => setError("Ошибка загрузки потока. Сгенерируйте эфир в админке.")}
+        onError={() => setError("Ошибка загрузки. Проверьте эфир в админке.")}
       />
     </div>
   );

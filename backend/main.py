@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from database import get_db
-from services.streamer_service import get_playlist_with_times, stream_broadcast
+from services.streamer_service import get_playlist_with_times, stream_broadcast, stream_broadcast_ffmpeg
 
 from database import engine, Base, get_db
 from routes import (
@@ -35,7 +35,7 @@ app = FastAPI(title="NAVO RADIO API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,9 +92,12 @@ async def stream_audio(
     d: date | None = Query(None, description="Date YYYY-MM-DD, default today"),
     from_start: bool = Query(False, description="С начала дня (иначе — с текущего времени по Москве)"),
 ):
-    """Stream broadcast as continuous MP3. Синхронизация по Москве (UTC+3)."""
+    """Stream broadcast as continuous MP3. FFmpeg subprocess — надёжный chunked encoding. Синхронизация по Москве (UTC+3)."""
+    import shutil
     from datetime import date as dt
 
+    if not shutil.which("ffmpeg"):
+        raise HTTPException(503, "FFmpeg не установлен. Установите: https://ffmpeg.org/download.html")
     broadcast_date = d or dt.today()
     db = next(get_db())
     try:
@@ -104,7 +107,7 @@ async def stream_audio(
     if not playlist:
         raise HTTPException(404, "Нет эфира на эту дату. Сгенерируйте сетку в админке.")
     return StreamingResponse(
-        stream_broadcast(playlist, sync_to_moscow=not from_start),
+        stream_broadcast_ffmpeg(playlist, sync_to_moscow=not from_start),
         media_type="audio/mpeg",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",

@@ -1,6 +1,7 @@
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Podcast
@@ -10,6 +11,19 @@ router = APIRouter(prefix="/podcasts", tags=["podcasts"])
 
 UPLOAD_DIR = Path(settings.upload_dir) / "podcasts"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.get("/{podcast_id}/audio")
+def get_podcast_audio(podcast_id: int, db: Session = Depends(get_db)):
+    p = db.query(Podcast).get(podcast_id)
+    if not p or not p.file_path:
+        raise HTTPException(404, "Podcast audio not found")
+    path = Path(p.file_path)
+    if not path.exists():
+        path = UPLOAD_DIR / Path(p.file_path).name
+    if not path.exists():
+        raise HTTPException(404, "File not found")
+    return FileResponse(path, media_type="audio/mpeg")
 
 
 @router.get("")

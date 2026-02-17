@@ -221,3 +221,60 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
         if idx >= len(playlist):
             idx = 0
             first_round = False
+
+
+async def stream_broadcast_ffmpeg(playlist: list[tuple], sync_to_moscow: bool = True):
+    """
+    Async generator: streams MP3 через FFmpeg subprocess.
+    Жёсткая привязка к таймингам эфирной сетки (Москва UTC+3).
+    FFmpeg надёжно обрабатывает chunked encoding.
+    """
+    if not playlist:
+        return
+    start_idx = 0
+    seek_sec = 0
+    if sync_to_moscow:
+        now = _moscow_now()
+        now_sec = now.hour * 3600 + now.minute * 60 + now.second
+        start_idx, seek_sec = _find_current_position(playlist, now_sec)
+    idx = start_idx
+    first_round = True
+    chunk_size = 32 * 1024
+    while True:
+        try:
+            item = playlist[idx]
+            path = item[0]
+            duration_sec = item[2]
+            skip = 0
+            if first_round and idx == start_idx and seek_sec > 0:
+                skip = min(int(seek_sec), int(duration_sec) - 1)
+                skip = max(0, skip)
+            if not path.exists():
+                idx = (idx + 1) % len(playlist)
+                if idx == 0:
+                    first_round = False
+                continue
+            args = [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-ss", str(skip),
+                "-i", str(path.resolve()),
+                "-c", "copy", "-f", "mp3", "pipe:1",
+            ]
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            while True:
+                chunk = await proc.stdout.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+            await proc.wait()
+        except (GeneratorExit, asyncio.CancelledError):
+            raise
+        except Exception:
+            pass
+        idx = (idx + 1) % len(playlist)
+        if idx == 0:
+            first_round = False

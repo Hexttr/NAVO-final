@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Player from "./pages/Player";
 import AdminLayout from "./pages/admin/AdminLayout";
-import Dashboard from "./pages/admin/Dashboard";
 import SongsDj from "./pages/admin/SongsDj";
 import News from "./pages/admin/News";
 import Weather from "./pages/admin/Weather";
@@ -16,7 +15,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Player />} />
         <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Broadcast />} />
           <Route path="songs" element={<SongsDj />} />
           <Route path="news" element={<News />} />
           <Route path="weather" element={<Weather />} />

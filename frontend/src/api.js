@@ -216,6 +216,17 @@ export async function getBroadcast(date) {
   return r.json();
 }
 
+export async function getBroadcastPlaylistUrls(date, sync = true) {
+  const r = await fetch(`${API}/broadcast/playlist-urls?d=${date}&sync=${sync}`);
+  if (!r.ok) throw new Error("Нет эфира на эту дату");
+  return r.json();
+}
+
+export async function getBroadcastNowPlaying(date) {
+  const r = await fetch(`${API}/broadcast/now-playing?d=${date}`);
+  return r.json();
+}
+
 export async function generateBroadcast(date) {
   const r = await fetch(`${API}/broadcast/generate?d=${date}`, { method: "POST" });
   return r.json();

@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getStats } from "../../api";
 import "./AdminLayout.css";
@@ -17,8 +17,6 @@ export default function AdminLayout() {
     const d = new Date();
     return d.toISOString().slice(0, 10);
   });
-  const navigate = useNavigate();
-
   useEffect(() => {
     const fetchStats = () => getStats().then(setStats).catch(() => setStats({}));
     fetchStats();
@@ -44,7 +42,7 @@ export default function AdminLayout() {
 
       <nav className="admin-dashboard">
         <NavLink to="/admin" end className={({ isActive }) => `nav-tile ${isActive ? "active" : ""}`}>
-          <span className="nav-tile-label">Эфир</span>
+          <span className="nav-tile-label">Сетка эфира</span>
           <span className="nav-tile-count">—</span>
         </NavLink>
         {NAV_ITEMS.map((item) => (
@@ -57,10 +55,6 @@ export default function AdminLayout() {
             <span className="nav-tile-count">{(stats && stats[item.path]) ?? "—"}</span>
           </NavLink>
         ))}
-        <NavLink to="/admin/broadcast" className={({ isActive }) => `nav-tile ${isActive ? "active" : ""}`}>
-          <span className="nav-tile-label">Сетка эфира</span>
-          <span className="nav-tile-count">—</span>
-        </NavLink>
       </nav>
 
       <main className="admin-main">
