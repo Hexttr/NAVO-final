@@ -69,14 +69,17 @@
 }
 .broadcast-table .expand-panel textarea {
   width: 100%;
-  min-height: 5rem;
+  min-height: 2.5rem;
   padding: 0.75rem;
   background: #1e1e28;
   border: 1px solid #2d2d3a;
   border-radius: 6px;
   color: #e2e8f0;
   font-size: 0.9rem;
-  resize: vertical;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
+  box-sizing: border-box;
 }
 .broadcast-table .expand-panel textarea:focus {
   outline: none;
@@ -87,22 +90,53 @@
   gap: 0.75rem;
   align-items: center;
   margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+.broadcast-table .voice-select-wrap {
+  display: flex;
+  align-items: center;
+  height: 2rem;
+  margin: 0;
 }
 .broadcast-table .voice-select {
-  padding: 0.4rem 0.6rem;
+  height: 2rem;
+  padding: 0 0.6rem;
+  margin: 0;
   background: #2d3748;
   border: 1px solid #2d2d3a;
   border-radius: 6px;
   color: #e2e8f0;
   font-size: 0.85rem;
+  box-sizing: border-box;
 }
 .broadcast-table .save-btn,
-.broadcast-table .revoice-btn {
-  padding: 0.4rem 0.75rem;
+.broadcast-table .revoice-btn,
+.broadcast-table .play-btn {
+  height: 2rem;
+  padding: 0 0.75rem;
   border: none;
   border-radius: 6px;
   font-size: 0.85rem;
+  line-height: 1;
   cursor: pointer;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.broadcast-table .play-btn {
+  background: #2d3748;
+  color: #48bb78;
+}
+.broadcast-table .play-btn:hover {
+  background: #1a202c;
+}
+.broadcast-table .play-btn.playing {
+  background: #276749;
+  color: white;
+}
+.broadcast-table .play-btn.playing:hover {
+  background: #22543d;
 }
 .broadcast-table .save-btn {
   background: #2d3748;

@@ -162,12 +162,13 @@ export default function SongsDj() {
   const handlePlayDj = (song) => {
     if (!song.dj_audio_path) return;
     const audio = audioRef.current;
-    const url = getSongDjAudioUrl(song.id);
+    let url = getSongDjAudioUrl(song.id);
     if (playingDjId === song.id && audio && !audio.paused) {
       audio.pause();
       setPlayingDjId(null);
     } else {
       setPlayingId(null);
+      url += (url.includes("?") ? "&" : "?") + "t=" + Date.now();
       audio.src = url;
       audio.play();
       setPlayingDjId(song.id);

@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { useOutletContext } from "react-router-dom";
 import {
   getBroadcast,
@@ -19,6 +19,9 @@ import {
   generateNewsTts,
   generateWeatherTts,
   getTtsVoices,
+  getSongDjAudioUrl,
+  getNewsAudioUrl,
+  getWeatherAudioUrl,
 } from "../../api";
 import "./Broadcast.css";
 
@@ -49,6 +52,9 @@ export default function Broadcast() {
   const [revoicingId, setRevoicingId] = useState(null);
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
+  const textareaRef = useRef(null);
+  const playAudioRef = useRef(null);
+  const [playingItemId, setPlayingItemId] = useState(null);
 
   useEffect(() => {
     load();
@@ -76,6 +82,14 @@ export default function Broadcast() {
       if (firstId && selectedVoice !== firstId) setSelectedVoice(firstId);
     });
   }, []);
+
+  useEffect(() => {
+    if (textareaRef.current && expandedId) {
+      const ta = textareaRef.current;
+      ta.style.height = "0";
+      ta.style.height = Math.max(40, ta.scrollHeight) + "px";
+    }
+  }, [editingText, expandedId]);
 
   useEffect(() => {
     if (insertSlot) {
@@ -201,6 +215,41 @@ export default function Broadcast() {
       setSavingId(null);
     }
   };
+
+  const getAudioUrl = (item) => {
+    if (item.entity_type === "dj") return getSongDjAudioUrl(item.entity_id);
+    if (item.entity_type === "news") return getNewsAudioUrl(item.entity_id);
+    if (item.entity_type === "weather") return getWeatherAudioUrl(item.entity_id);
+    return null;
+  };
+
+  const handlePlay = (item) => {
+    let url = getAudioUrl(item);
+    if (!url || !playAudioRef.current) return;
+    const audio = playAudioRef.current;
+    if (playingItemId === item.id) {
+      audio.pause();
+      setPlayingItemId(null);
+      return;
+    }
+    url += (url.includes("?") ? "&" : "?") + "t=" + Date.now();
+    audio.src = url;
+    audio.play();
+    setPlayingItemId(item.id);
+  };
+
+  useEffect(() => {
+    const audio = playAudioRef.current;
+    if (!audio) return;
+    const onEnded = () => setPlayingItemId(null);
+    const onPause = () => setPlayingItemId(null);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("pause", onPause);
+    return () => {
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("pause", onPause);
+    };
+  }, []);
 
   const handleRevoice = async (item) => {
     setRevoicingId(item.id);
@@ -329,23 +378,26 @@ export default function Broadcast() {
                       <td colSpan={8}>
                         <div className="expand-panel">
                           <textarea
+                            ref={textareaRef}
                             value={editingText}
                             onChange={(e) => setEditingText(e.target.value)}
                             placeholder="Текст для озвучки"
-                            rows={4}
+                            rows={1}
                           />
                           <div className="expand-actions">
                             {voices.length > 0 && (
-                              <select
-                                value={selectedVoice}
-                                onChange={(e) => setSelectedVoice(e.target.value)}
-                                className="voice-select"
-                              >
+                              <div className="voice-select-wrap">
+                                <select
+                                  value={selectedVoice}
+                                  onChange={(e) => setSelectedVoice(e.target.value)}
+                                  className="voice-select"
+                                >
                                 {voices.map((v) => {
                                   const [id, label] = Array.isArray(v) ? v : [v, v];
                                   return <option key={id} value={id}>{label}</option>;
                                 })}
-                              </select>
+                                </select>
+                              </div>
                             )}
                             <button
                               type="button"
@@ -353,7 +405,7 @@ export default function Broadcast() {
                               onClick={() => handleSaveText(item)}
                               disabled={savingId === item.id || editingText.trim() === (item.text || "").trim()}
                             >
-                              {savingId === item.id ? "…" : "Сохранить"}
+                              {savingId === item.id ? "…" : <><span>💾</span> Сохранить</>}
                             </button>
                             <button
                               type="button"
@@ -361,7 +413,15 @@ export default function Broadcast() {
                               onClick={() => handleRevoice(item)}
                               disabled={revoicingId === item.id}
                             >
-                              {revoicingId === item.id ? "…" : "Переозвучить"}
+                              {revoicingId === item.id ? "…" : <><span>🔊</span> Переозвучить</>}
+                            </button>
+                            <button
+                              type="button"
+                              className={`play-btn ${playingItemId === item.id ? "playing" : ""}`}
+                              onClick={() => handlePlay(item)}
+                              title={playingItemId === item.id ? "Стоп" : "Слушать"}
+                            >
+                              {playingItemId === item.id ? <><span>⏸</span> Стоп</> : <><span>▶</span> Слушать</>}
                             </button>
                           </div>
                         </div>
@@ -482,6 +542,7 @@ export default function Broadcast() {
           </div>
         </div>
       )}
+      <audio ref={playAudioRef} />
     </div>
   );
 }
