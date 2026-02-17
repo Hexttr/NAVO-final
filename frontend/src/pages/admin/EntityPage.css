@@ -53,8 +53,12 @@
   background: rgba(128, 90, 213, 0.05);
 }
 
+.entity-table .col-dj-text {
+  min-width: 800px;
+  max-width: 800px;
+}
 .dj-cell {
-  max-width: 400px;
+  max-width: 800px;
 }
 .dj-text {
   display: block;

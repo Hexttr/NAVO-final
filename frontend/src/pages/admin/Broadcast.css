@@ -24,24 +24,6 @@
   width: 100%;
   border-collapse: collapse;
 }
-.broadcast-table .col-expand {
-  width: 2rem;
-  text-align: center;
-  cursor: pointer;
-  vertical-align: middle;
-}
-.broadcast-table .col-expand .expand-arrow {
-  display: inline-block;
-  font-size: 0.65rem;
-  color: #718096;
-  transition: transform 0.2s;
-}
-.broadcast-table .col-expand .expand-arrow:hover {
-  color: #63b3ed;
-}
-.broadcast-table .col-expand .expand-arrow.expanded {
-  transform: rotate(180deg);
-}
 .broadcast-table .col-desc {
   max-width: 10rem;
   overflow: hidden;
@@ -209,23 +191,54 @@
   font-weight: 600;
 }
 
-.col-actions {
-  width: 3rem;
-  text-align: center;
+.broadcast-table th.col-actions {
+  width: auto;
+  text-align: right;
 }
-.delete-btn {
+.broadcast-table td.col-actions {
+  text-align: right;
+  white-space: nowrap;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+.broadcast-table .col-actions .icon-btn {
   width: 1.75rem;
   height: 1.75rem;
   padding: 0;
   border: none;
   border-radius: 4px;
-  background: #c53030;
-  color: white;
   font-size: 0.9rem;
   cursor: pointer;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.delete-btn:hover {
+.broadcast-table .col-actions .edit-btn {
+  background: #2d3748;
+  color: #63b3ed;
+}
+.broadcast-table .col-actions .edit-btn:hover {
+  background: #1a202c;
+}
+.broadcast-table .col-actions .play-row-btn {
+  background: #2d3748;
+  color: #48bb78;
+}
+.broadcast-table .col-actions .play-row-btn:hover {
+  background: #1a202c;
+}
+.broadcast-table .col-actions .play-row-btn.playing {
+  background: #276749;
+  color: white;
+}
+.broadcast-table .col-actions .delete-btn {
+  background: #c53030;
+  color: white;
+}
+.broadcast-table .col-actions .delete-btn:hover {
   background: #9b2c2c;
 }
 .insert-btn {

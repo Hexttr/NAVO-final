@@ -19,9 +19,12 @@ import {
   generateNewsTts,
   generateWeatherTts,
   getTtsVoices,
+  getSongAudioUrl,
   getSongDjAudioUrl,
   getNewsAudioUrl,
   getWeatherAudioUrl,
+  getPodcastAudioUrl,
+  getIntroAudioUrl,
 } from "../../api";
 import "./Broadcast.css";
 
@@ -188,7 +191,7 @@ export default function Broadcast() {
 
   const hasText = (item) => ["dj", "news", "weather"].includes(item.entity_type);
   const toggleExpand = (item, e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     if (!hasText(item)) return;
     if (expandedId === item.id) {
       setExpandedId(null);
@@ -216,10 +219,15 @@ export default function Broadcast() {
     }
   };
 
+  const hasAudio = (item) =>
+    ["song", "dj", "news", "weather", "podcast", "intro"].includes(item.entity_type);
   const getAudioUrl = (item) => {
+    if (item.entity_type === "song") return getSongAudioUrl(item.entity_id);
     if (item.entity_type === "dj") return getSongDjAudioUrl(item.entity_id);
     if (item.entity_type === "news") return getNewsAudioUrl(item.entity_id);
     if (item.entity_type === "weather") return getWeatherAudioUrl(item.entity_id);
+    if (item.entity_type === "podcast") return getPodcastAudioUrl(item.entity_id);
+    if (item.entity_type === "intro") return getIntroAudioUrl(item.entity_id);
     return null;
   };
 
@@ -301,7 +309,6 @@ export default function Broadcast() {
           <table className="broadcast-table">
             <thead>
               <tr>
-                <th className="col-expand"></th>
                 <th className="col-num">№</th>
                 <th>Время</th>
                 <th>Тип</th>
@@ -323,13 +330,6 @@ export default function Broadcast() {
                     onDrop={(e) => handleDrop(e, idx)}
                     onDragEnd={handleDragEnd}
                   >
-                    <td className="col-expand" data-no-drag onClick={(e) => toggleExpand(item, e)}>
-                      {hasText(item) && (
-                        <span className={`expand-arrow ${expandedId === item.id ? "expanded" : ""}`} title={expandedId === item.id ? "Свернуть" : "Развернуть"}>
-                          ▼
-                        </span>
-                      )}
-                    </td>
                     <td className="col-num">{idx + 1}</td>
                     <td>{item.start_time}</td>
                     <td>{TYPE_LABELS[item.entity_type] || item.entity_type}</td>
@@ -361,21 +361,46 @@ export default function Broadcast() {
                     <td>{Math.round(item.duration_seconds)} с</td>
                     <td className="col-actions">
                       {item.entity_type !== "empty" && (
-                        <button
-                          type="button"
-                          className="delete-btn"
-                          onClick={() => handleDelete(item)}
-                          title="Удалить"
-                          aria-label="Удалить"
-                        >
-                          ✕
-                        </button>
+                        <>
+                          {hasText(item) && (
+                            <button
+                              type="button"
+                              className="icon-btn edit-btn"
+                              onClick={(e) => { e.stopPropagation(); toggleExpand(item); }}
+                              title="Редактировать"
+                              data-no-drag
+                            >
+                              ✎
+                            </button>
+                          )}
+                          {hasAudio(item) && (
+                            <button
+                              type="button"
+                              className={`icon-btn play-row-btn ${playingItemId === item.id ? "playing" : ""}`}
+                              onClick={(e) => { e.stopPropagation(); handlePlay(item); }}
+                              title={playingItemId === item.id ? "Стоп" : "Слушать"}
+                              data-no-drag
+                            >
+                              {playingItemId === item.id ? "⏹" : "▶"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="icon-btn delete-btn"
+                            onClick={() => handleDelete(item)}
+                            title="Удалить"
+                            aria-label="Удалить"
+                            data-no-drag
+                          >
+                            ✕
+                          </button>
+                        </>
                       )}
                     </td>
                   </tr>
                   {expandedId === item.id && hasText(item) && (
                     <tr key={`${item.id}-detail`} className="detail-row">
-                      <td colSpan={8}>
+                      <td colSpan={7}>
                         <div className="expand-panel">
                           <textarea
                             ref={textareaRef}

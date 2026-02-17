@@ -265,7 +265,7 @@ export default function SongsDj() {
             <th>Автор</th>
             <th>Название</th>
             <th>Альбом</th>
-            <th>Текст DJ</th>
+            <th className="col-dj-text">Текст DJ</th>
             <th>Действия</th>
           </tr>
         </thead>
@@ -287,7 +287,7 @@ export default function SongsDj() {
               <td>{s.artist}</td>
               <td>{s.title}</td>
               <td>{s.album || "—"}</td>
-              <td>
+              <td className="col-dj-text">
                 {editingDj === s.id ? (
                   <div>
                     <textarea

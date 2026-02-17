@@ -17,6 +17,12 @@ export function getSongAudioUrl(songId) {
 export function getSongDjAudioUrl(songId) {
   return `${API.replace("/api", "")}/api/songs/${songId}/dj-audio`;
 }
+export function getPodcastAudioUrl(podcastId) {
+  return `${API.replace("/api", "")}/api/podcasts/${podcastId}/audio`;
+}
+export function getIntroAudioUrl(introId) {
+  return `${API.replace("/api", "")}/api/intros/${introId}/audio`;
+}
 
 export async function createSong(data) {
   const r = await fetch(`${API}/songs`, {
