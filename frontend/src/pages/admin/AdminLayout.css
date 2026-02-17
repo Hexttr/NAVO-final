@@ -1,0 +1,80 @@
+.admin-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0f0f14;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  background: radial-gradient(ellipse at top, #1a1625 0%, #0f0f14 100%);
+  border-bottom: 1px solid #2d2d3a;
+}
+
+.admin-logo {
+  font-size: 1.75rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #805ad5 0%, #d53f8c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+}
+
+.admin-header-right {
+  display: flex;
+  gap: 1rem;
+}
+
+.date-picker {
+  width: auto;
+  min-width: 160px;
+}
+
+.admin-dashboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  background: #0f0f14;
+  border-bottom: 1px solid #2d2d3a;
+}
+
+.nav-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  background: #1e1e28;
+  border: 1px solid #2d2d3a;
+  min-width: 140px;
+  transition: all 0.2s;
+}
+.nav-tile:hover {
+  border-color: #805ad5;
+  background: #252530;
+}
+.nav-tile.active {
+  border-color: #805ad5;
+  background: linear-gradient(135deg, rgba(128, 90, 213, 0.2) 0%, rgba(213, 63, 140, 0.1) 100%);
+}
+
+.nav-tile-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.nav-tile-count {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #b794f6;
+  margin-top: 0.25rem;
+}
+
+.admin-main {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}

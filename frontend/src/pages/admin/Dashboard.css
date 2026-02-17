@@ -1,0 +1,14 @@
+.dashboard {
+  max-width: 600px;
+}
+
+.dashboard h2 {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+}
+
+.dashboard-desc {
+  color: #a0aec0;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}

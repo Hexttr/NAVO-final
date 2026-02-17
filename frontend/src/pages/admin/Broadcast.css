@@ -1,0 +1,58 @@
+.broadcast-page h2 {
+  margin: 0 0 1.5rem;
+  font-size: 1.5rem;
+}
+
+.broadcast-actions {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.broadcast-actions button.confirm {
+  background: linear-gradient(135deg, #c53030 0%, #9b2c2c 100%);
+}
+
+.broadcast-grid {
+  background: #1e1e28;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #2d2d3a;
+}
+
+.broadcast-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.broadcast-table th,
+.broadcast-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #2d2d3a;
+}
+.broadcast-table th {
+  background: #252530;
+  font-weight: 600;
+  color: #a0aec0;
+}
+.broadcast-table tr.type-dj td {
+  background: rgba(128, 90, 213, 0.08);
+}
+.broadcast-table tr.type-news td {
+  background: rgba(66, 153, 225, 0.08);
+}
+.broadcast-table tr.type-weather td {
+  background: rgba(72, 187, 120, 0.08);
+}
+.broadcast-table tr.type-podcast td {
+  background: rgba(237, 100, 166, 0.08);
+}
+.broadcast-table tr.type-intro td {
+  background: rgba(246, 224, 94, 0.08);
+}
+
+.empty-hint {
+  padding: 2rem;
+  color: #a0aec0;
+  text-align: center;
+}
