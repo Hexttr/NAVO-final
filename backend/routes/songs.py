@@ -1,7 +1,8 @@
-import os
+import json
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
@@ -62,7 +63,7 @@ async def upload_song_file(song_id: int, file: UploadFile, db: Session = Depends
 
 @router.post("/jamendo/generate")
 async def generate_from_jamendo(db: Session = Depends(get_db)):
-    tracks = await JamendoService.search_and_get_tracks(limit_per_query=4)
+    tracks = await JamendoService.search_and_get_tracks(limit_per_query=20)
     if not tracks:
         raise HTTPException(502, "Jamendo API не вернул треки. Проверьте запрос или попробуйте позже.")
     created = []
@@ -89,10 +90,58 @@ async def generate_from_jamendo(db: Session = Depends(get_db)):
         except Exception as e:
             db.delete(song)
             db.commit()
-            # Log but continue with other tracks
             import logging
             logging.warning(f"Jamendo download failed for {tid}: {e}")
     return {"created": len(created), "songs": created}
+
+
+@router.get("/jamendo/generate-stream")
+async def generate_from_jamendo_stream(db: Session = Depends(get_db)):
+    """Streaming endpoint with progress updates via SSE."""
+
+    async def event_generator():
+        try:
+            tracks = await JamendoService.search_and_get_tracks(limit_per_query=20)
+            total = len(tracks)
+            if total == 0:
+                yield f"data: {json.dumps({'error': 'Нет треков', 'progress': 0})}\n\n"
+                return
+            yield f"data: {json.dumps({'progress': 0, 'current': 0, 'total': total, 'created': 0})}\n\n"
+            created = 0
+            for i, t in enumerate(tracks):
+                tid = t.get("id")
+                if not tid:
+                    continue
+                tid = str(tid)
+                url = t.get("audiodownload") or t.get("audio") or f"https://prod-1.storage.jamendo.com/download/track/{tid}/mp32/"
+                title = t.get("name", "Unknown")
+                artist = t.get("artist_name", "Unknown")
+                album = t.get("album_name", "")
+                song = Song(title=title, artist=artist, album=album, file_path="")
+                db.add(song)
+                db.commit()
+                db.refresh(song)
+                try:
+                    path = UPLOAD_DIR / f"{song.id}_{uuid.uuid4().hex}.mp3"
+                    await download_track(url, path)
+                    song.file_path = str(path)
+                    song.duration_seconds = float(t.get("duration", 0))
+                    db.commit()
+                    created += 1
+                except Exception:
+                    db.delete(song)
+                    db.commit()
+                progress = int((i + 1) / total * 100)
+                yield f"data: {json.dumps({'progress': progress, 'current': i + 1, 'total': total, 'created': created})}\n\n"
+            yield f"data: {json.dumps({'progress': 100, 'done': True, 'created': created})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'progress': 0})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/{song_id}/generate-dj")

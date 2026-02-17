@@ -3,7 +3,7 @@ import {
   getSongs,
   createSong,
   uploadSongFile,
-  generateFromJamendo,
+  generateFromJamendoStream,
   generateDj,
   generateDjBatch,
   generateDjTts,
@@ -22,6 +22,7 @@ export default function SongsDj() {
   const [newAlbum, setNewAlbum] = useState("");
   const [editingDj, setEditingDj] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
+  const [jamendoProgress, setJamendoProgress] = useState(null);
 
   useEffect(() => {
     load();
@@ -51,19 +52,18 @@ export default function SongsDj() {
     load();
   };
 
-  const handleJamendo = async () => {
-    setLoading(true);
-    try {
-      const res = await generateFromJamendo();
-      await load();
-      if (res.created === 0) {
-        alert("Треки не загрузились. Возможно, Jamendo временно недоступен или формат изменился.");
+  const handleJamendo = () => {
+    setJamendoProgress({ progress: 0, current: 0, total: 0, created: 0 });
+    const cancel = generateFromJamendoStream((data) => {
+      setJamendoProgress(data);
+      if (data.done || data.error) {
+        setJamendoProgress(null);
+        load();
+        if (data.error) alert(data.error);
+        else if (data.created === 0) alert("Треки не загрузились.");
       }
-    } catch (e) {
-      alert(e.message || "Ошибка при загрузке из Jamendo");
-    } finally {
-      setLoading(false);
-    }
+    });
+    return cancel;
   };
 
   const handleGenerateDj = async (songId) => {
@@ -126,13 +126,25 @@ export default function SongsDj() {
             Добавить вручную
           </button>
         </div>
-        <button className="primary" onClick={handleJamendo} disabled={loading}>
+        <button className="primary" onClick={handleJamendo} disabled={!!jamendoProgress}>
           Сгенерировать из Jamendo
         </button>
-        <button onClick={handleGenerateDjAll} disabled={loading || !songs.length}>
+        <button onClick={handleGenerateDjAll} disabled={loading || !!jamendoProgress || !songs.length}>
           Сгенерировать DJ для всех
         </button>
       </div>
+      {jamendoProgress && (
+        <div className="jamendo-progress">
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${jamendoProgress.progress || 0}%` }} />
+          </div>
+          <span className="progress-text">
+            {jamendoProgress.total
+              ? `${jamendoProgress.current}/${jamendoProgress.total} — загружено ${jamendoProgress.created} треков`
+              : "Поиск треков..."}
+          </span>
+        </div>
+      )}
 
       <div className="voice-select">
         <label>Голос TTS:</label>

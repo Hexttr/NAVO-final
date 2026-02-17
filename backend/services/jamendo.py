@@ -44,10 +44,25 @@ class JamendoService:
         "central asian",
         "persian music",
         "uzbek music",
+        "oriental music",
+        "pamir music",
+        "afghan music",
+        "turkmen music",
+        "kyrgyz music",
+        "kazakh music",
+        "middle east music",
+        "arabic music",
+        "turkish music",
+        "iranian music",
+        "caucasus music",
+        "silk road music",
+        "central asia folk",
+        "balkan music",
+        "russian folk",
     ]
 
     @staticmethod
-    async def search_and_get_tracks(limit_per_query: int = 4) -> list[dict]:
+    async def search_and_get_tracks(limit_per_query: int = 20) -> list[dict]:
         """Search multiple queries and return combined unique tracks."""
         all_tracks = []
         seen_ids = set()

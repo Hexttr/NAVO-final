@@ -35,6 +35,21 @@ export async function generateFromJamendo() {
   return data;
 }
 
+/** Stream Jamendo generation with progress. onProgress({ progress, current, total, created }) */
+export function generateFromJamendoStream(onProgress) {
+  const base = API.replace("/api", "");
+  const eventSource = new EventSource(`${base}/api/songs/jamendo/generate-stream`);
+  eventSource.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      onProgress(data);
+      if (data.done || data.error) eventSource.close();
+    } catch (_) {}
+  };
+  eventSource.onerror = () => eventSource.close();
+  return () => eventSource.close();
+}
+
 export async function generateDj(songId) {
   const r = await fetch(`${API}/songs/${songId}/generate-dj`, { method: "POST" });
   return r.json();
