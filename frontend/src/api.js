@@ -221,6 +221,46 @@ export async function generateBroadcast(date) {
   return r.json();
 }
 
+export async function deleteBroadcastItem(itemId, date) {
+  const r = await fetch(`${API}/broadcast/items/${itemId}?d=${date}`, { method: "DELETE" });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || "Ошибка удаления");
+  }
+  return r.json();
+}
+
+export async function insertBroadcastItem(itemId, date, entityType, entityId) {
+  const r = await fetch(`${API}/broadcast/items/${itemId}/insert?d=${date}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entity_type: entityType, entity_id: entityId }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || "Ошибка вставки");
+  }
+  return r.json();
+}
+
+export async function moveBroadcastItem(date, fromIndex, toIndex) {
+  const r = await fetch(
+    `${API}/broadcast/move?d=${date}&from_index=${fromIndex}&to_index=${toIndex}`,
+    { method: "POST" }
+  );
+  if (!r.ok) throw new Error("Ошибка перемещения");
+  return r.json();
+}
+
+export async function swapBroadcastItems(date, fromIndex, toIndex) {
+  const r = await fetch(
+    `${API}/broadcast/swap?d=${date}&from_index=${fromIndex}&to_index=${toIndex}`,
+    { method: "POST" }
+  );
+  if (!r.ok) throw new Error("Ошибка обмена");
+  return r.json();
+}
+
 export async function getTtsVoices() {
   const r = await fetch(`${API}/tts/voices`);
   return r.json();

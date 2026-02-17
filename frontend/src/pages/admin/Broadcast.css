@@ -54,6 +54,115 @@
 .broadcast-table tr.type-intro td {
   background: rgba(246, 224, 94, 0.08);
 }
+.broadcast-table tr.type-empty td {
+  background: rgba(100, 100, 100, 0.15);
+  color: #718096;
+}
+.broadcast-table tbody tr {
+  cursor: grab;
+}
+.broadcast-table tbody tr:active {
+  cursor: grabbing;
+}
+.broadcast-table tbody tr.dragging {
+  opacity: 0.5;
+}
+
+.col-actions {
+  width: 3rem;
+  text-align: center;
+}
+.delete-btn {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: #c53030;
+  color: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.delete-btn:hover {
+  background: #9b2c2c;
+}
+.insert-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  background: #2d3748;
+  color: #63b3ed;
+  border: 1px dashed #4a5568;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.insert-btn:hover {
+  background: #1a202c;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal.insert-modal {
+  background: #1e1e28;
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow: auto;
+  border: 1px solid #2d2d3a;
+}
+.insert-modal h3 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+.insert-catalog section {
+  margin-bottom: 1rem;
+}
+.insert-catalog h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: #a0aec0;
+}
+.insert-catalog ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+.insert-catalog li {
+  margin-bottom: 0.25rem;
+}
+.insert-catalog button {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  background: #252530;
+  border: 1px solid #2d2d3a;
+  border-radius: 6px;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.insert-catalog button:hover {
+  background: #2d2d3a;
+}
+.modal-close {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #2d3748;
+  border: none;
+  border-radius: 6px;
+  color: #a0aec0;
+  cursor: pointer;
+}
 
 .empty-hint {
   padding: 2rem;

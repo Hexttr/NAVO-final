@@ -1,9 +1,14 @@
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+
+from database import get_db
+from services.streamer_service import get_playlist_with_times, stream_broadcast
 
 from database import engine, Base, get_db
 from routes import (
@@ -59,3 +64,30 @@ if uploads_path.exists():
 @app.get("/")
 def root():
     return {"message": "NAVO RADIO API", "docs": "/docs"}
+
+
+@app.get("/stream")
+async def stream_audio(
+    d: date | None = Query(None, description="Date YYYY-MM-DD, default today"),
+    from_start: bool = Query(False, description="С начала дня (иначе — с текущего времени по Москве)"),
+):
+    """Stream broadcast as continuous MP3. Синхронизация по Москве (UTC+3)."""
+    from datetime import date as dt
+
+    broadcast_date = d or dt.today()
+    db = next(get_db())
+    try:
+        playlist = get_playlist_with_times(db, broadcast_date)
+    finally:
+        db.close()
+    if not playlist:
+        raise HTTPException(404, "Нет эфира на эту дату. Сгенерируйте сетку в админке.")
+    return StreamingResponse(
+        stream_broadcast(playlist, sync_to_moscow=not from_start),
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Transfer-Encoding": "chunked",
+        },
+    )
