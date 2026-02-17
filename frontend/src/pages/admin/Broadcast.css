@@ -24,6 +24,10 @@
   width: 100%;
   border-collapse: collapse;
 }
+.broadcast-table .col-num {
+  width: 3rem;
+  text-align: right;
+}
 .broadcast-table th,
 .broadcast-table td {
   padding: 0.75rem 1rem;

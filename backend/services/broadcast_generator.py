@@ -113,38 +113,35 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
     current_sec = 0
     day_end = 24 * 3600
 
+    def try_add_song(remaining_sec: int) -> bool:
+        """Add a song that fits in remaining_sec. Returns True if added."""
+        nonlocal current_sec
+        for _ in range(len(songs)):
+            s = next_song()
+            dj = 45 if s.dj_audio_path else 0
+            dur = int(s.duration_seconds or 180)
+            total = dj + dur
+            if total <= remaining_sec:
+                if s.dj_audio_path:
+                    blocks.append((current_sec, "dj", s.id, dj, f"DJ: {s.artist} - {s.title}"))
+                    current_sec += dj
+                blocks.append((current_sec, "song", s.id, dur, f"{s.artist} - {s.title}"))
+                current_sec += dur
+                return True
+        return False
+
     for t_sec, et, eid, dur_sec, meta in timed_events:
         gap = t_sec - current_sec
-        while gap > 90:
-            song = next_song()
-            dj_sec = 45
-            song_sec = int(song.duration_seconds or 180)
-            total = (dj_sec if song.dj_audio_path else 0) + song_sec
-            if total <= gap:
-                if song.dj_audio_path:
-                    blocks.append((current_sec, "dj", song.id, dj_sec, f"DJ: {song.artist} - {song.title}"))
-                    current_sec += dj_sec
-                blocks.append((current_sec, "song", song.id, song_sec, f"{song.artist} - {song.title}"))
-                current_sec += song_sec
-                gap = t_sec - current_sec
-            else:
-                break
+        while gap > 90 and try_add_song(gap):
+            gap = t_sec - current_sec
         blocks.append((t_sec, et, eid, dur_sec, meta))
         current_sec = t_sec + dur_sec
 
-    # Fill remaining time after last event with songs
-    while current_sec < day_end - 90:
-        song = next_song()
-        dj_sec = 45
-        song_sec = int(song.duration_seconds or 180)
-        total = (dj_sec if song.dj_audio_path else 0) + song_sec
-        if current_sec + total > day_end:
+    # Fill remaining time after last event — ищем песню, которая влезает
+    while current_sec < day_end - 60:
+        remaining = day_end - current_sec
+        if not try_add_song(remaining):
             break
-        if song.dj_audio_path:
-            blocks.append((current_sec, "dj", song.id, dj_sec, f"DJ: {song.artist} - {song.title}"))
-            current_sec += dj_sec
-        blocks.append((current_sec, "song", song.id, song_sec, f"{song.artist} - {song.title}"))
-        current_sec += song_sec
 
     blocks.sort(key=lambda x: x[0])
 

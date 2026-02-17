@@ -74,6 +74,7 @@ export default function Broadcast() {
           <table className="broadcast-table">
             <thead>
               <tr>
+                <th className="col-num">№</th>
                 <th>Время</th>
                 <th>Тип</th>
                 <th>Описание</th>
@@ -81,8 +82,9 @@ export default function Broadcast() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {items.map((item, idx) => (
                 <tr key={item.id} className={`type-${item.entity_type}`}>
+                  <td className="col-num">{idx + 1}</td>
                   <td>{item.start_time}</td>
                   <td>{TYPE_LABELS[item.entity_type] || item.entity_type}</td>
                   <td>
