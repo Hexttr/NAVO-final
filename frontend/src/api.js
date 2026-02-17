@@ -16,7 +16,9 @@ export async function createSong(data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  return r.json();
+  const res = await r.json();
+  if (!r.ok) throw new Error(res.detail || "Ошибка создания");
+  return res;
 }
 
 export async function uploadSongFile(songId, file) {
@@ -28,7 +30,9 @@ export async function uploadSongFile(songId, file) {
 
 export async function generateFromJamendo() {
   const r = await fetch(`${API}/songs/jamendo/generate`, { method: "POST" });
-  return r.json();
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || "Ошибка Jamendo");
+  return data;
 }
 
 export async function generateDj(songId) {
