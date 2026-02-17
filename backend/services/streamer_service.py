@@ -41,6 +41,23 @@ def _find_mp3_frame_sync(f, start_offset: int) -> int:
     return start_offset  # fallback
 
 
+def _skip_id3_and_find_sync(f) -> None:
+    """If file starts with ID3 tag, seek past it to first MP3 frame. Modifies f position."""
+    header = f.read(10)
+    if len(header) < 10:
+        f.seek(0)
+        return
+    if header[:3] == b"ID3":
+        size = (header[6] & 0x7F) << 21 | (header[7] & 0x7F) << 14 | (header[8] & 0x7F) << 7 | (header[9] & 0x7F)
+        f.seek(10 + size)
+        data = f.read(8192)
+        for i in range(len(data) - 1):
+            if data[i] == 0xFF and (data[i + 1] & 0xE0) == 0xE0:
+                f.seek(10 + size + i)
+                return
+    f.seek(0)
+
+
 def _resolve_path(p: Path) -> Path | None:
     """Try to resolve path; return None if file doesn't exist."""
     p = Path(str(p).replace("\\", "/"))
@@ -177,6 +194,10 @@ async def stream_broadcast(playlist: list[tuple[Path, int, float]], sync_to_mosc
                 if skip_bytes:
                     skip_bytes = _find_mp3_frame_sync(f, skip_bytes)
                     f.seek(skip_bytes)
+                else:
+                    # Пропускаем ID3 у всех кроме первого — иначе двойной ID3 ломает декодер
+                    if not (first_round and idx == start_idx):
+                        _skip_id3_and_find_sync(f)
                 while True:
                     chunk = f.read(CHUNK_SIZE)
                     if not chunk:
