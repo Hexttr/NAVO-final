@@ -287,8 +287,6 @@ export default function Broadcast() {
 
   return (
     <div className="broadcast-page">
-      <h2>Сетка эфира — {selectedDate}</h2>
-
       <div className="broadcast-actions">
         <button
           className={`primary ${confirmGen ? "confirm" : ""}`}

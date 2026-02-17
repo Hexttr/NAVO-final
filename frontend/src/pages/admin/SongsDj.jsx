@@ -319,22 +319,28 @@ export default function SongsDj() {
                 )}
               </td>
               <td>
-                {!s.file_path ? (
-                  <label className="upload-btn">
-                    Загрузить MP3
-                    <input
-                      type="file"
-                      accept=".mp3"
-                      hidden
-                      onChange={(e) => e.target.files[0] && handleFileUpload(s.id, e.target.files[0])}
-                    />
-                  </label>
-                ) : (
-                  <span className="ok">✓</span>
-                )}
-                <button className="danger" onClick={() => handleDelete(s.id)}>
-                  Удалить
-                </button>
+                <div className="cell-actions">
+                  {!s.file_path && (
+                    <label className="upload-btn">
+                      Загрузить MP3
+                      <input
+                        type="file"
+                        accept=".mp3"
+                        hidden
+                        onChange={(e) => e.target.files[0] && handleFileUpload(s.id, e.target.files[0])}
+                      />
+                    </label>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-btn delete-btn"
+                    onClick={() => handleDelete(s.id)}
+                    title="Удалить"
+                    aria-label="Удалить"
+                  >
+                    ✕
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

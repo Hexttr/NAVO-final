@@ -6,16 +6,75 @@
 }
 
 .admin-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 2rem;
+  padding: 2rem 2rem;
+  min-height: 5rem;
   background: radial-gradient(ellipse at top, #1a1625 0%, #0f0f14 100%);
   border-bottom: 1px solid #2d2d3a;
+  overflow: hidden;
+}
+
+.comets {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.comet {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: radial-gradient(circle, #f687b3 0%, #ed64a6 40%, transparent 70%);
+  border-radius: 50%;
+  box-shadow: 0 0 12px #ed64a6, 0 0 24px rgba(237, 100, 166, 0.5);
+  animation: comet-fly 12s linear infinite;
+  top: 20%;
+}
+.comet::after {
+  content: "";
+  position: absolute;
+  left: -60px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 70px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, rgba(237, 100, 166, 0.6) 30%, rgba(246, 135, 179, 0.9) 100%);
+  border-radius: 2px;
+  filter: blur(1px);
+}
+@keyframes comet-fly {
+  0% {
+    left: -20px;
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+.comet:nth-child(1) { top: 15%; animation-duration: 14s; }
+.comet:nth-child(2) { top: 35%; animation-duration: 11s; }
+.comet:nth-child(3) { top: 55%; animation-duration: 13s; }
+.comet:nth-child(4) { top: 25%; animation-duration: 15s; }
+.comet:nth-child(5) { top: 70%; animation-duration: 10s; }
+
+.admin-header .admin-logo,
+.admin-header .admin-header-right {
+  position: relative;
+  z-index: 1;
 }
 
 .admin-logo {
-  font-size: 1.75rem;
+  font-size: 2.5rem;
   font-weight: 800;
   background: linear-gradient(135deg, #805ad5 0%, #d53f8c 100%);
   -webkit-background-clip: text;
@@ -46,6 +105,8 @@
 .nav-tile {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   padding: 1rem 1.5rem;
   border-radius: 12px;
   background: #1e1e28;
@@ -60,6 +121,24 @@
 .nav-tile.active {
   border-color: #805ad5;
   background: linear-gradient(135deg, rgba(128, 90, 213, 0.2) 0%, rgba(213, 63, 140, 0.1) 100%);
+}
+
+.nav-tile-broadcast {
+  background: linear-gradient(135deg, rgba(237, 100, 166, 0.15) 0%, rgba(246, 173, 198, 0.12) 100%);
+  border-color: rgba(237, 100, 166, 0.3);
+}
+.nav-tile-broadcast:hover {
+  background: linear-gradient(135deg, rgba(237, 100, 166, 0.22) 0%, rgba(246, 173, 198, 0.18) 100%);
+  border-color: rgba(237, 100, 166, 0.5);
+}
+.nav-tile-broadcast.active {
+  background: linear-gradient(135deg, rgba(237, 100, 166, 0.28) 0%, rgba(246, 173, 198, 0.22) 100%);
+  border-color: #ed64a6;
+}
+.nav-tile-broadcast .nav-tile-label {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .nav-tile-label {

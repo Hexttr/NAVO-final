@@ -29,6 +29,13 @@ export default function AdminLayout() {
   return (
     <div className="admin-layout">
       <header className="admin-header">
+        <div className="comets">
+          <span className="comet" style={{ animationDelay: "0s" }} />
+          <span className="comet" style={{ animationDelay: "3s" }} />
+          <span className="comet" style={{ animationDelay: "6s" }} />
+          <span className="comet" style={{ animationDelay: "2s" }} />
+          <span className="comet" style={{ animationDelay: "5s" }} />
+        </div>
         <h1 className="admin-logo">NAVO RADIO</h1>
         <div className="admin-header-right">
           <input
@@ -41,9 +48,8 @@ export default function AdminLayout() {
       </header>
 
       <nav className="admin-dashboard">
-        <NavLink to="/admin" end className={({ isActive }) => `nav-tile ${isActive ? "active" : ""}`}>
-          <span className="nav-tile-label">Сетка эфира</span>
-          <span className="nav-tile-count">—</span>
+        <NavLink to="/admin" end className={({ isActive }) => `nav-tile nav-tile-broadcast ${isActive ? "active" : ""}`}>
+          <span className="nav-tile-label">СЕТКА<br />ЭФИРА</span>
         </NavLink>
         {NAV_ITEMS.map((item) => (
           <NavLink
