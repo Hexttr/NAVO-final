@@ -94,6 +94,14 @@
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
 }
+.player-debug {
+  font-size: 0.8rem;
+  color: #718096;
+  margin-bottom: 1rem;
+}
+.player-debug a {
+  color: #63b3ed;
+}
 .player-error {
   color: #fc8181;
   font-size: 0.85rem;

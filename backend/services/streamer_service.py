@@ -165,7 +165,7 @@ def _find_current_position(playlist: list[tuple], now_sec: int) -> tuple[int, in
     return 0, 0
 
 
-async def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
+def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
     """
     Async generator: yields MP3 bytes. Бесконечный цикл — поток не обрывается.
     If sync_to_moscow=True, starts from current Moscow time position.

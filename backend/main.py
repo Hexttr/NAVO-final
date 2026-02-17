@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from database import get_db
@@ -66,6 +66,27 @@ def root():
     return {"message": "NAVO RADIO API", "docs": "/docs"}
 
 
+@app.get("/stream-test")
+def stream_test(
+    d: date | None = Query(None, description="Date YYYY-MM-DD"),
+):
+    """Тест: один файл. Открой /stream-test?d=2026-02-17 — если играет, проблема в мульти-стриме."""
+    from datetime import date as dt
+
+    broadcast_date = d or dt.today()
+    db = next(get_db())
+    try:
+        playlist = get_playlist_with_times(db, broadcast_date)
+    finally:
+        db.close()
+    if not playlist:
+        raise HTTPException(404, "Нет эфира")
+    path = playlist[0][0]
+    if not path.exists():
+        raise HTTPException(404, f"Файл не найден: {path}")
+    return FileResponse(path, media_type="audio/mpeg")
+
+
 @app.get("/stream")
 async def stream_audio(
     d: date | None = Query(None, description="Date YYYY-MM-DD, default today"),
@@ -88,5 +109,6 @@ async def stream_audio(
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
+            "Accept-Ranges": "none",
         },
     )

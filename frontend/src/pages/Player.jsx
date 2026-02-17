@@ -8,13 +8,16 @@ export default function Player() {
   const [playing, setPlaying] = useState(false);
   const [streamDate, setStreamDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [fromStart, setFromStart] = useState(false);
+  const [useTestStream, setUseTestStream] = useState(true);
   const [error, setError] = useState(null);
   const audioRef = useRef(null);
 
-  const streamUrl = useMemo(
-    () => `${API_BASE}/stream?d=${streamDate}${fromStart ? "&from_start=1" : ""}`,
-    [streamDate, fromStart]
-  );
+  const streamUrl = useMemo(() => {
+    if (useTestStream) {
+      return `${API_BASE}/stream-test?d=${streamDate}`;
+    }
+    return `${API_BASE}/stream?d=${streamDate}${fromStart ? "&from_start=1" : ""}`;
+  }, [streamDate, fromStart, useTestStream]);
 
   const togglePlay = () => {
     if (!audioRef.current) return;
@@ -67,6 +70,19 @@ export default function Player() {
         >
           {playing ? "⏸" : "▶"}
         </button>
+      </div>
+      <div className="player-sync">
+        <label>
+          <input
+            type="checkbox"
+            checked={useTestStream}
+            onChange={(e) => {
+              setUseTestStream(e.target.checked);
+              setPlaying(false);
+            }}
+          />
+          Тест (один файл) — пока основной стрим не работает
+        </label>
       </div>
       <p className="player-hint">
         {playing ? "Слушайте эфир" : "Нажмите Play для прослушивания"}
