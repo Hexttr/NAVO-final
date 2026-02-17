@@ -21,7 +21,10 @@ export default function News() {
   const [generating, setGenerating] = useState(false);
   const [ttsProgress, setTtsProgress] = useState(null);
   const [playingId, setPlayingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
   const audioRef = useRef(null);
+
+  const PREVIEW_LEN = 100;
 
   useEffect(() => {
     load();
@@ -176,9 +179,12 @@ export default function News() {
       </div>
 
       <audio ref={audioRef} onEnded={() => setPlayingId(null)} />
-      <div className="items-list">
+      <div className="items-list items-list-compact">
         {items.map((n) => (
-          <div key={n.id} className="item-card">
+          <div
+            key={n.id}
+            className={`item-card item-card-collapsible ${expandedId === n.id ? "expanded" : ""}`}
+          >
             {editingId === n.id ? (
               <div>
                 <textarea
@@ -190,23 +196,36 @@ export default function News() {
                 <button onClick={() => setEditingId(null)}>Готово</button>
               </div>
             ) : (
-              <div>
-                <p className="item-text">{n.text}</p>
-                <div className="item-actions">
-                  <button onClick={() => setEditingId(n.id)}>Редактировать</button>
-                  {n.audio_path && (
-                    <button onClick={() => handlePlay(n)}>
-                      {playingId === n.id ? "Стоп" : "Воспроизвести"}
-                    </button>
-                  )}
-                  {n.text && !n.audio_path && (
-                    <button onClick={() => handleTts(n.id)}>Озвучить</button>
-                  )}
-                  <button className="danger" onClick={() => handleDelete(n.id)}>
-                    Удалить
-                  </button>
+              <>
+                <div
+                  className="item-card-header"
+                  onClick={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                >
+                  <span className="item-preview">
+                    {n.text.length > PREVIEW_LEN ? `${n.text.slice(0, PREVIEW_LEN)}...` : n.text}
+                  </span>
+                  <span className="item-expand-icon">{expandedId === n.id ? "▲" : "▼"}</span>
                 </div>
-              </div>
+                {expandedId === n.id && (
+                  <div className="item-card-body">
+                    <p className="item-text">{n.text}</p>
+                    <div className="item-actions">
+                      <button onClick={() => setEditingId(n.id)}>Редактировать</button>
+                      {n.audio_path && (
+                        <button onClick={() => handlePlay(n)}>
+                          {playingId === n.id ? "Стоп" : "Воспроизвести"}
+                        </button>
+                      )}
+                      {n.text && !n.audio_path && (
+                        <button onClick={() => handleTts(n.id)}>Озвучить</button>
+                      )}
+                      <button className="danger" onClick={() => handleDelete(n.id)}>
+                        Удалить
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         ))}
