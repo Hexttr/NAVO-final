@@ -88,6 +88,5 @@ async def stream_audio(
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
-            "Transfer-Encoding": "chunked",
         },
     )

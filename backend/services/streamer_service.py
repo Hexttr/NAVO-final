@@ -61,39 +61,24 @@ def _skip_id3_and_find_sync(f) -> None:
 def _resolve_path(p: Path, entity_type: str = "", entity_id: int = 0) -> Path | None:
     """Try to resolve path; return None if file doesn't exist."""
     p = Path(str(p).replace("\\", "/"))
-    if p.exists():
-        return p
-    base = PROJECT_ROOT / settings.upload_dir
-    # PROJECT_ROOT/uploads/dj/xxx, PROJECT_ROOT/uploads/songs/xxx
-    alt = PROJECT_ROOT / p
-    if alt.exists():
-        return alt
+    candidates = [
+        p,
+        PROJECT_ROOT / p,
+        PROJECT_ROOT / settings.upload_dir / p.name,
+        Path.cwd() / p,
+    ]
     if len(p.parts) >= 2:
-        alt = base / p.parts[-2] / p.name
-        if alt.exists():
-            return alt
-    alt = base / p.name
-    if alt.exists():
-        return alt
-    # Backend runs from backend/ — uploads may be backend/uploads/
-    backend_uploads = PROJECT_ROOT / "backend" / settings.upload_dir
-    if backend_uploads.exists():
-        alt = backend_uploads / p.name
-        if alt.exists():
-            return alt
-        if len(p.parts) >= 2:
-            alt = backend_uploads / p.parts[-2] / p.name
-            if alt.exists():
-                return alt
-    # DJ: explicit dj/dj_{id}.mp3
+        candidates.append(PROJECT_ROOT / settings.upload_dir / p.parts[-2] / p.name)
+        candidates.append(Path.cwd() / settings.upload_dir / p.parts[-2] / p.name)
     if entity_type == "dj" and entity_id:
-        for root in (base, backend_uploads, Path.cwd() / settings.upload_dir):
-            alt = root / "dj" / f"dj_{entity_id}.mp3"
-            if alt.exists():
+        for root in (PROJECT_ROOT / settings.upload_dir, Path.cwd() / settings.upload_dir):
+            candidates.append(root / "dj" / f"dj_{entity_id}.mp3")
+    for alt in candidates:
+        try:
+            if alt and alt.exists():
                 return alt
-    alt = Path.cwd() / p
-    if alt.exists():
-        return alt
+        except OSError:
+            pass
     return None
 
 
@@ -196,38 +181,40 @@ async def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
     idx = start_idx
     first_round = True
     while True:
-        path, _, duration_sec, entity_type = playlist[idx]
-        skip_bytes = 0
-        if first_round and idx == start_idx and seek_sec > 0 and duration_sec > 0:
+        try:
+            item = playlist[idx]
+            path = item[0]
+            duration_sec = item[2]
+            entity_type = item[3] if len(item) > 3 else "song"
+            skip_bytes = 0
+            if first_round and idx == start_idx and seek_sec > 0 and duration_sec > 0:
+                try:
+                    size = path.stat().st_size
+                    skip_bytes = int((seek_sec / duration_sec) * size)
+                    skip_bytes = min(skip_bytes, max(0, size - CHUNK_SIZE))
+                except OSError:
+                    pass
             try:
                 size = path.stat().st_size
-                skip_bytes = int((seek_sec / duration_sec) * size)
-                skip_bytes = min(skip_bytes, max(0, size - CHUNK_SIZE))
+                if size < 100:  # Пустой/битый файл — пропускаем
+                    raise OSError("skip")
             except OSError:
                 pass
-        try:
-            path = path.resolve()  # Абсолютный путь — надёжнее на Windows
-            size = path.stat().st_size
-            if size < 100:  # Пустой/битый файл — пропускаем
-                idx += 1
-                if idx >= len(playlist):
-                    idx = 0
-                    first_round = False
-                continue
-            with open(path, "rb") as f:
-                if skip_bytes:
-                    skip_bytes = _find_mp3_frame_sync(f, skip_bytes)
-                    f.seek(skip_bytes)
-                else:
-                    # Пропускаем ID3 у всех кроме первого — иначе двойной ID3 ломает декодер
-                    if not (first_round and idx == start_idx):
-                        _skip_id3_and_find_sync(f)
-                while True:
-                    chunk = f.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    yield chunk
-                    await asyncio.sleep(0)
+            else:
+                with open(path, "rb") as f:
+                    if skip_bytes:
+                        skip_bytes = _find_mp3_frame_sync(f, skip_bytes)
+                        f.seek(skip_bytes)
+                    else:
+                        if not (first_round and idx == start_idx):
+                            _skip_id3_and_find_sync(f)
+                    while True:
+                        chunk = f.read(CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        yield chunk
+        except (StopIteration, GeneratorExit):
+            raise
         except Exception:
             pass
         idx += 1
