@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import { useOutletContext } from "react-router-dom";
 import {
   getNews,
   createNews,
   generateNews,
   generateNewsTts,
+  regenerateNewsText,
   updateNews,
   deleteNews,
   getTtsVoices,
@@ -12,11 +14,15 @@ import {
 import "./EntityPage.css";
 
 export default function News() {
+  const { selectedDate } = useOutletContext();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [voices, setVoices] = useState([]);
   const [newText, setNewText] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const [editingText, setEditingText] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const editTextareaRef = useRef(null);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const [generating, setGenerating] = useState(false);
   const [ttsProgress, setTtsProgress] = useState(null);
@@ -29,16 +35,24 @@ export default function News() {
   useEffect(() => {
     load();
     getTtsVoices().then((r) => setVoices(r.voices || []));
-  }, []);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const ta = editTextareaRef.current;
+    if (ta && editingId) {
+      ta.style.height = "auto";
+      ta.style.height = Math.max(120, ta.scrollHeight) + "px";
+    }
+  }, [editingText, editingId]);
 
   const load = () => {
     setLoading(true);
-    getNews().then(setItems).finally(() => setLoading(false));
+    getNews(selectedDate).then(setItems).finally(() => setLoading(false));
   };
 
   const handleAdd = async () => {
     if (!newText.trim()) return;
-    await createNews(newText.trim());
+    await createNews(newText.trim(), selectedDate);
     setNewText("");
     load();
   };
@@ -46,7 +60,7 @@ export default function News() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await generateNews();
+      await generateNews(selectedDate);
       load();
     } catch (e) {
       alert(e.message || "Ошибка генерации");
@@ -100,9 +114,39 @@ export default function News() {
   };
 
   const handleSave = async (id, text) => {
-    await updateNews(id, text);
-    setEditingId(null);
-    load();
+    setEditBusy(true);
+    try {
+      await updateNews(id, text);
+      setEditingId(null);
+      load();
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const handleRegenerateInEdit = async (id) => {
+    setEditBusy(true);
+    try {
+      const updated = await regenerateNewsText(id);
+      setEditingText(updated.text || "");
+    } catch (e) {
+      alert(e.message || "Ошибка перегенерации");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const handleRevoiceInEdit = async (id) => {
+    setEditBusy(true);
+    try {
+      await generateNewsTts(id, selectedVoice);
+      load();
+      setEditingId(null);
+    } catch (e) {
+      alert(e.message || "Ошибка озвучки");
+    } finally {
+      setEditBusy(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -113,23 +157,41 @@ export default function News() {
 
   if (loading && !items.length) return <div className="loading">Загрузка...</div>;
 
+  const dateLabel = selectedDate
+    ? new Date(selectedDate + "T12:00:00").toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+
   return (
     <div className="entity-page">
-      <h2>Новости</h2>
+      <h2>Новости {dateLabel && `— ${dateLabel}`}</h2>
 
-      <div className="entity-actions">
-        <div className="add-manual">
-          <textarea
-            placeholder="Текст выпуска новостей"
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            rows={4}
-            style={{ width: 400 }}
-          />
-          <button onClick={handleAdd} disabled={!newText.trim()}>
-            Добавить вручную
-          </button>
+      <div className="add-manual">
+        <textarea
+          placeholder="Текст выпуска новостей"
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          rows={8}
+        />
+      </div>
+
+      <div className="entity-toolbar">
+        <div className="voice-select">
+          <label>Голос TTS:</label>
+          <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)}>
+            {voices.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
         </div>
+        <button onClick={handleAdd} disabled={!newText.trim()}>
+          Добавить вручную
+        </button>
         <button
           className="primary"
           onClick={handleGenerate}
@@ -138,6 +200,7 @@ export default function News() {
           Сгенерировать
         </button>
         <button
+          className="tts-all-btn"
           onClick={handleTtsAll}
           disabled={loading || generating || !!ttsProgress || !items.filter((n) => n.text && !n.audio_path).length}
         >
@@ -167,17 +230,6 @@ export default function News() {
         </div>
       )}
 
-      <div className="voice-select">
-        <label>Голос TTS:</label>
-        <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)}>
-          {voices.map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <audio ref={audioRef} onEnded={() => setPlayingId(null)} />
       <div className="items-list items-list-compact">
         {items.map((n) => (
@@ -186,14 +238,38 @@ export default function News() {
             className={`item-card item-card-collapsible ${expandedId === n.id ? "expanded" : ""}`}
           >
             {editingId === n.id ? (
-              <div>
+              <div className="item-edit-form">
                 <textarea
-                  defaultValue={n.text}
-                  onBlur={(e) => handleSave(n.id, e.target.value)}
-                  rows={6}
-                  className="text-block"
+                  ref={editTextareaRef}
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  rows={4}
                 />
-                <button onClick={() => setEditingId(null)}>Готово</button>
+                <div className="item-edit-form-actions">
+                  <button
+                    type="button"
+                    onClick={() => handleSave(n.id, editingText)}
+                    disabled={editBusy}
+                  >
+                    Сохранить
+                  </button>
+                  <button
+                    type="button"
+                    className="regen-btn"
+                    onClick={() => handleRegenerateInEdit(n.id)}
+                    disabled={editBusy}
+                  >
+                    Перегенерировать текст
+                  </button>
+                  <button
+                    type="button"
+                    className="revoice-btn"
+                    onClick={() => handleRevoiceInEdit(n.id)}
+                    disabled={editBusy || !editingText.trim()}
+                  >
+                    Переозвучить
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -204,25 +280,46 @@ export default function News() {
                   <span className="item-preview">
                     {n.text.length > PREVIEW_LEN ? `${n.text.slice(0, PREVIEW_LEN)}...` : n.text}
                   </span>
-                  <span className="item-expand-icon">{expandedId === n.id ? "▲" : "▼"}</span>
+                  <div className="item-card-header-actions" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="item-icon-btn edit-btn"
+                      onClick={() => {
+                        setEditingId(n.id);
+                        setEditingText(n.text || "");
+                      }}
+                      title="Редактировать"
+                    >
+                      ✎
+                    </button>
+                    {n.audio_path && (
+                      <button
+                        type="button"
+                        className={`item-icon-btn play-btn ${playingId === n.id ? "playing" : ""}`}
+                        onClick={() => handlePlay(n)}
+                        title={playingId === n.id ? "Стоп" : "Воспроизвести"}
+                      >
+                        {playingId === n.id ? "⏸" : "▶"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="item-icon-btn delete-btn"
+                      onClick={() => handleDelete(n.id)}
+                      title="Удалить"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 {expandedId === n.id && (
                   <div className="item-card-body">
                     <p className="item-text">{n.text}</p>
-                    <div className="item-actions">
-                      <button onClick={() => setEditingId(n.id)}>Редактировать</button>
-                      {n.audio_path && (
-                        <button onClick={() => handlePlay(n)}>
-                          {playingId === n.id ? "Стоп" : "Воспроизвести"}
-                        </button>
-                      )}
-                      {n.text && !n.audio_path && (
+                    {n.text && !n.audio_path && (
+                      <div className="item-actions">
                         <button onClick={() => handleTts(n.id)}>Озвучить</button>
-                      )}
-                      <button className="danger" onClick={() => handleDelete(n.id)}>
-                        Удалить
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

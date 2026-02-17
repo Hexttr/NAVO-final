@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
-from models import News
+from models import News, BroadcastItem
 from config import settings
 from pathlib import Path
 from services.news_service import fetch_news_from_rss
@@ -15,15 +16,31 @@ router = APIRouter(prefix="/news", tags=["news"])
 
 class NewsCreate(BaseModel):
     text: str
+    broadcast_date: date | None = None
 
 
 class NewsUpdate(BaseModel):
     text: str | None = None
 
 
+@router.get("/rss-test")
+async def rss_test():
+    """Проверка: что возвращают RSS-источники. Для отладки."""
+    from services.news_service import fetch_news_from_rss
+    items = await fetch_news_from_rss(limit=10)
+    return {"count": len(items), "items": [{"title": x["title"], "summary": (x["summary"] or "")[:100]} for x in items]}
+
+
 @router.get("")
-def list_news(db: Session = Depends(get_db)):
-    return db.query(News).order_by(News.id.desc()).all()
+def list_news(
+    d: date | None = Query(None, description="Фильтр по дате YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(News).order_by(News.id.desc())
+    if d is not None:
+        from sqlalchemy import or_
+        q = q.filter(or_(News.broadcast_date == d, News.broadcast_date.is_(None)))
+    return q.all()
 
 
 @router.get("/{news_id}/audio")
@@ -39,7 +56,9 @@ def get_news_audio(news_id: int, db: Session = Depends(get_db)):
 
 @router.post("")
 def create_news(data: NewsCreate, db: Session = Depends(get_db)):
-    n = News(text=data.text)
+    text = data.text
+    bd = data.broadcast_date
+    n = News(text=text, broadcast_date=bd)
     db.add(n)
     db.commit()
     db.refresh(n)
@@ -47,17 +66,67 @@ def create_news(data: NewsCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/generate")
-async def generate_news(db: Session = Depends(get_db)):
+async def generate_news(
+    d: date | None = Query(None, description="Дата для новой записи YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
     items = await fetch_news_from_rss(limit=15)
     if not items:
-        raise HTTPException(500, "Не удалось получить новости из источников")
+        raise HTTPException(500, "Не удалось получить новости из RSS. Проверьте доступность источников.")
     news_texts = [f"{x['title']}. {x['summary']}" for x in items]
-    text = await generate_news_text(news_texts)
-    n = News(text=text)
+    try:
+        text = await generate_news_text(news_texts)
+    except ValueError as e:
+        raise HTTPException(500, str(e))
+    n = News(text=text, broadcast_date=d)
     db.add(n)
     db.commit()
     db.refresh(n)
     return n
+
+
+@router.post("/{news_id}/regenerate")
+async def regenerate_news(
+    news_id: int,
+    d: date | None = Query(None, description="Дата эфира — создаётся новая запись на этот день"),
+    broadcast_item_id: int | None = Query(None, description="ID слота в эфире — обновить ссылку"),
+    db: Session = Depends(get_db),
+):
+    """Перегенерировать: создаёт НОВУЮ запись на дату d, обновляет слот. Иначе — перезаписывает текущую."""
+    items = await fetch_news_from_rss(limit=10)
+    if not items:
+        raise HTTPException(500, "Не удалось получить новости из RSS. Проверьте доступность источников.")
+    news_texts = [f"{x['title']}. {x['summary']}" for x in items]
+    try:
+        text = await generate_news_text(news_texts)
+    except ValueError as e:
+        raise HTTPException(500, str(e))
+
+    if d is not None:
+        # Создаём новую запись на дату d (не трогаем старую)
+        n = News(text=text, broadcast_date=d)
+        db.add(n)
+        db.commit()
+        db.refresh(n)
+        if broadcast_item_id is not None:
+            slot = db.query(BroadcastItem).filter(
+                BroadcastItem.id == broadcast_item_id,
+                BroadcastItem.entity_type == "news",
+            ).first()
+            if slot:
+                slot.entity_id = n.id
+                db.commit()
+        return n
+    else:
+        # Старое поведение: перезапись
+        n = db.query(News).get(news_id)
+        if not n:
+            raise HTTPException(404, "News not found")
+        n.text = text
+        n.audio_path = ""
+        db.commit()
+        db.refresh(n)
+        return n
 
 
 @router.post("/{news_id}/tts")

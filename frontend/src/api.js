@@ -97,23 +97,37 @@ export async function deleteSong(songId) {
   return r.json();
 }
 
-export async function getNews() {
-  const r = await fetch(`${API}/news`);
+export async function getNews(date) {
+  const url = date ? `${API}/news?d=${date}` : `${API}/news`;
+  const r = await fetch(url);
   return r.json();
 }
 
-export async function createNews(text) {
+export async function createNews(text, broadcastDate) {
   const r = await fetch(`${API}/news`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, broadcast_date: broadcastDate || null }),
   });
   return r.json();
 }
 
-export async function generateNews() {
-  const r = await fetch(`${API}/news/generate`, { method: "POST" });
+export async function generateNews(broadcastDate) {
+  const url = broadcastDate ? `${API}/news/generate?d=${broadcastDate}` : `${API}/news/generate`;
+  const r = await fetch(url, { method: "POST" });
   return r.json();
+}
+
+export async function regenerateNewsText(newsId, broadcastDate, broadcastItemId) {
+  let url = `${API}/news/${newsId}/regenerate`;
+  const params = [];
+  if (broadcastDate) params.push(`d=${broadcastDate}`);
+  if (broadcastItemId != null) params.push(`broadcast_item_id=${broadcastItemId}`);
+  if (params.length) url += "?" + params.join("&");
+  const r = await fetch(url, { method: "POST" });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || "Ошибка");
+  return data;
 }
 
 export async function generateNewsTts(newsId, voice = "ru-RU-DmitryNeural") {
@@ -139,23 +153,37 @@ export async function deleteNews(newsId) {
   return r.json();
 }
 
-export async function getWeather() {
-  const r = await fetch(`${API}/weather`);
+export async function getWeather(date) {
+  const url = date ? `${API}/weather?d=${date}` : `${API}/weather`;
+  const r = await fetch(url);
   return r.json();
 }
 
-export async function createWeather(text) {
+export async function createWeather(text, broadcastDate) {
   const r = await fetch(`${API}/weather`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, broadcast_date: broadcastDate || null }),
   });
   return r.json();
 }
 
-export async function generateWeather() {
-  const r = await fetch(`${API}/weather/generate`, { method: "POST" });
+export async function generateWeather(broadcastDate) {
+  const url = broadcastDate ? `${API}/weather/generate?d=${broadcastDate}` : `${API}/weather/generate`;
+  const r = await fetch(url, { method: "POST" });
   return r.json();
+}
+
+export async function regenerateWeatherText(weatherId, broadcastDate, broadcastItemId) {
+  let url = `${API}/weather/${weatherId}/regenerate`;
+  const params = [];
+  if (broadcastDate) params.push(`d=${broadcastDate}`);
+  if (broadcastItemId != null) params.push(`broadcast_item_id=${broadcastItemId}`);
+  if (params.length) url += "?" + params.join("&");
+  const r = await fetch(url, { method: "POST" });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || "Ошибка");
+  return data;
 }
 
 export async function generateWeatherTts(weatherId, voice = "ru-RU-DmitryNeural") {
@@ -220,6 +248,13 @@ export async function deleteIntro(introId) {
 export async function getBroadcast(date) {
   const r = await fetch(`${API}/broadcast?d=${date}`);
   return r.json();
+}
+
+export async function deleteBroadcast(date) {
+  const r = await fetch(`${API}/broadcast?d=${date}`, { method: "DELETE" });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || "Ошибка");
+  return data;
 }
 
 export async function getBroadcastPlaylistUrls(date, sync = true) {

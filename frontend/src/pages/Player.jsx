@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
 import { getBroadcastPlaylistUrls } from "../api";
 import "./Player.css";
 
 const API_BASE = "http://localhost:8000";
+const EQ_BARS = 24;
+const BAR_COUNT = EQ_BARS;
 
 export default function Player() {
   const [playing, setPlaying] = useState(false);
@@ -11,7 +12,14 @@ export default function Player() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [barHeights, setBarHeights] = useState(() => Array(BAR_COUNT).fill(15));
+  const [useAnalyser, setUseAnalyser] = useState(false);
   const audioRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const sourceRef = useRef(null);
+  const dataArrayRef = useRef(null);
+  const rafRef = useRef(null);
 
   const togglePlay = async () => {
     setError(null);
@@ -52,6 +60,79 @@ export default function Player() {
     setPlaying(true);
   };
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!playing || !audio?.src) return;
+
+    try {
+      const audioOrigin = new URL(audio.src, window.location.href).origin;
+      if (audioOrigin !== window.location.origin) {
+        setUseAnalyser(false);
+        return;
+      }
+    } catch {
+      setUseAnalyser(false);
+      return;
+    }
+
+    const setupAudioContext = () => {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      let ctx = audioContextRef.current;
+      if (!ctx || ctx.state === "closed") {
+        ctx = new AudioContextClass();
+        audioContextRef.current = ctx;
+      }
+      if (ctx.state === "suspended") ctx.resume();
+
+      if (!sourceRef.current) {
+        try {
+          const source = ctx.createMediaElementSource(audio);
+          sourceRef.current = source;
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 256;
+          analyser.smoothingTimeConstant = 0.7;
+          analyser.minDecibels = -70;
+          analyser.maxDecibels = -20;
+          source.connect(analyser);
+          analyser.connect(ctx.destination);
+          analyserRef.current = analyser;
+          dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
+        } catch (e) {
+          console.warn("Audio analyser setup failed:", e);
+          return;
+        }
+      }
+
+      const analyser = analyserRef.current;
+      const dataArray = dataArrayRef.current;
+      if (!analyser || !dataArray) return;
+
+      const animate = () => {
+        rafRef.current = requestAnimationFrame(animate);
+        analyser.getByteFrequencyData(dataArray);
+        const step = Math.floor(dataArray.length / BAR_COUNT);
+        const next = Array(BAR_COUNT)
+          .fill(0)
+          .map((_, i) => {
+            const idx = Math.min(i * step, dataArray.length - 1);
+            const v = dataArray[idx] || 0;
+            return Math.max(8, Math.min(80, 8 + (v / 255) * 72));
+          });
+        setBarHeights(next);
+      };
+      setUseAnalyser(true);
+      animate();
+    };
+
+    setupAudioContext();
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [playing]);
+
   const handleEnded = () => {
     if (items.length <= 1) {
       setPlaying(false);
@@ -85,9 +166,17 @@ export default function Player() {
         {playing ? "Слушайте эфир" : "Нажмите Play для прослушивания"}
       </p>
       {error && <p className="player-error">{error}</p>}
-      <Link to="/admin" className="admin-link">
-        Админ-панель
-      </Link>
+      {playing && (
+        <div className={`equalizer ${!useAnalyser ? "equalizer-fallback" : ""}`} aria-hidden>
+          {barHeights.map((h, i) => (
+            <div
+              key={i}
+              className="equalizer-bar"
+              style={useAnalyser ? { height: `${h}%` } : undefined}
+            />
+          ))}
+        </div>
+      )}
       <audio
         ref={audioRef}
         onEnded={handleEnded}

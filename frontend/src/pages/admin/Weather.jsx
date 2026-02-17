@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import { useOutletContext } from "react-router-dom";
 import {
   getWeather,
   createWeather,
   generateWeather,
   generateWeatherTts,
+  regenerateWeatherText,
   updateWeather,
   deleteWeather,
   getTtsVoices,
@@ -12,11 +14,15 @@ import {
 import "./EntityPage.css";
 
 export default function Weather() {
+  const { selectedDate } = useOutletContext();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [voices, setVoices] = useState([]);
   const [newText, setNewText] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const [editingText, setEditingText] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const editTextareaRef = useRef(null);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const [generating, setGenerating] = useState(false);
   const [ttsProgress, setTtsProgress] = useState(null);
@@ -29,16 +35,24 @@ export default function Weather() {
   useEffect(() => {
     load();
     getTtsVoices().then((r) => setVoices(r.voices || []));
-  }, []);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const ta = editTextareaRef.current;
+    if (ta && editingId) {
+      ta.style.height = "auto";
+      ta.style.height = Math.max(120, ta.scrollHeight) + "px";
+    }
+  }, [editingText, editingId]);
 
   const load = () => {
     setLoading(true);
-    getWeather().then(setItems).finally(() => setLoading(false));
+    getWeather(selectedDate).then(setItems).finally(() => setLoading(false));
   };
 
   const handleAdd = async () => {
     if (!newText.trim()) return;
-    await createWeather(newText.trim());
+    await createWeather(newText.trim(), selectedDate);
     setNewText("");
     load();
   };
@@ -46,7 +60,7 @@ export default function Weather() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await generateWeather();
+      await generateWeather(selectedDate);
       load();
     } catch (e) {
       alert(e.message || "Ошибка генерации");
@@ -100,9 +114,39 @@ export default function Weather() {
   };
 
   const handleSave = async (id, text) => {
-    await updateWeather(id, text);
-    setEditingId(null);
-    load();
+    setEditBusy(true);
+    try {
+      await updateWeather(id, text);
+      setEditingId(null);
+      load();
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const handleRegenerateInEdit = async (id) => {
+    setEditBusy(true);
+    try {
+      const updated = await regenerateWeatherText(id);
+      setEditingText(updated.text || "");
+    } catch (e) {
+      alert(e.message || "Ошибка перегенерации");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const handleRevoiceInEdit = async (id) => {
+    setEditBusy(true);
+    try {
+      await generateWeatherTts(id, selectedVoice);
+      load();
+      setEditingId(null);
+    } catch (e) {
+      alert(e.message || "Ошибка озвучки");
+    } finally {
+      setEditBusy(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -113,23 +157,41 @@ export default function Weather() {
 
   if (loading && !items.length) return <div className="loading">Загрузка...</div>;
 
+  const dateLabel = selectedDate
+    ? new Date(selectedDate + "T12:00:00").toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+
   return (
     <div className="entity-page">
-      <h2>Погода</h2>
+      <h2>Погода {dateLabel && `— ${dateLabel}`}</h2>
 
-      <div className="entity-actions">
-        <div className="add-manual">
-          <textarea
-            placeholder="Текст прогноза погоды"
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            rows={4}
-            style={{ width: 400 }}
-          />
-          <button onClick={handleAdd} disabled={!newText.trim()}>
-            Добавить вручную
-          </button>
+      <div className="add-manual">
+        <textarea
+          placeholder="Текст прогноза погоды"
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          rows={8}
+        />
+      </div>
+
+      <div className="entity-toolbar">
+        <div className="voice-select">
+          <label>Голос TTS:</label>
+          <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)}>
+            {voices.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
         </div>
+        <button onClick={handleAdd} disabled={!newText.trim()}>
+          Добавить вручную
+        </button>
         <button
           className="primary"
           onClick={handleGenerate}
@@ -138,6 +200,7 @@ export default function Weather() {
           Сгенерировать
         </button>
         <button
+          className="tts-all-btn"
           onClick={handleTtsAll}
           disabled={loading || generating || !!ttsProgress || !items.filter((w) => w.text && !w.audio_path).length}
         >
@@ -167,17 +230,6 @@ export default function Weather() {
         </div>
       )}
 
-      <div className="voice-select">
-        <label>Голос TTS:</label>
-        <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)}>
-          {voices.map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <audio ref={audioRef} onEnded={() => setPlayingId(null)} />
       <div className="items-list items-list-compact">
         {items.map((w) => (
@@ -186,14 +238,38 @@ export default function Weather() {
             className={`item-card item-card-collapsible ${expandedId === w.id ? "expanded" : ""}`}
           >
             {editingId === w.id ? (
-              <div>
+              <div className="item-edit-form">
                 <textarea
-                  defaultValue={w.text}
-                  onBlur={(e) => handleSave(w.id, e.target.value)}
-                  rows={6}
-                  className="text-block"
+                  ref={editTextareaRef}
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  rows={4}
                 />
-                <button onClick={() => setEditingId(null)}>Готово</button>
+                <div className="item-edit-form-actions">
+                  <button
+                    type="button"
+                    onClick={() => handleSave(w.id, editingText)}
+                    disabled={editBusy}
+                  >
+                    Сохранить
+                  </button>
+                  <button
+                    type="button"
+                    className="regen-btn"
+                    onClick={() => handleRegenerateInEdit(w.id)}
+                    disabled={editBusy}
+                  >
+                    Перегенерировать текст
+                  </button>
+                  <button
+                    type="button"
+                    className="revoice-btn"
+                    onClick={() => handleRevoiceInEdit(w.id)}
+                    disabled={editBusy || !editingText.trim()}
+                  >
+                    Переозвучить
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -204,25 +280,46 @@ export default function Weather() {
                   <span className="item-preview">
                     {w.text.length > PREVIEW_LEN ? `${w.text.slice(0, PREVIEW_LEN)}...` : w.text}
                   </span>
-                  <span className="item-expand-icon">{expandedId === w.id ? "▲" : "▼"}</span>
+                  <div className="item-card-header-actions" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="item-icon-btn edit-btn"
+                      onClick={() => {
+                        setEditingId(w.id);
+                        setEditingText(w.text || "");
+                      }}
+                      title="Редактировать"
+                    >
+                      ✎
+                    </button>
+                    {w.audio_path && (
+                      <button
+                        type="button"
+                        className={`item-icon-btn play-btn ${playingId === w.id ? "playing" : ""}`}
+                        onClick={() => handlePlay(w)}
+                        title={playingId === w.id ? "Стоп" : "Воспроизвести"}
+                      >
+                        {playingId === w.id ? "⏸" : "▶"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="item-icon-btn delete-btn"
+                      onClick={() => handleDelete(w.id)}
+                      title="Удалить"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 {expandedId === w.id && (
                   <div className="item-card-body">
                     <p className="item-text">{w.text}</p>
-                    <div className="item-actions">
-                      <button onClick={() => setEditingId(w.id)}>Редактировать</button>
-                      {w.audio_path && (
-                        <button onClick={() => handlePlay(w)}>
-                          {playingId === w.id ? "Стоп" : "Воспроизвести"}
-                        </button>
-                      )}
-                      {w.text && !w.audio_path && (
+                    {w.text && !w.audio_path && (
+                      <div className="item-actions">
                         <button onClick={() => handleTts(w.id)}>Озвучить</button>
-                      )}
-                      <button className="danger" onClick={() => handleDelete(w.id)}>
-                        Удалить
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

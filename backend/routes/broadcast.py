@@ -149,6 +149,17 @@ def get_broadcast(
     return {"date": str(d), "items": result}
 
 
+@router.delete("")
+def delete_broadcast(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Удалить весь эфир на дату."""
+    deleted = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).delete()
+    db.commit()
+    return {"date": str(d), "deleted": deleted, "message": "Эфир удалён"}
+
+
 @router.post("/generate")
 def generate(
     d: date = Query(..., description="Date YYYY-MM-DD"),

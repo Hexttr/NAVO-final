@@ -34,6 +34,7 @@ class News(Base):
     id = Column(Integer, primary_key=True, index=True)
     text = Column(Text, nullable=False)
     audio_path = Column(String(1024), default="")
+    broadcast_date = Column(Date, nullable=True, index=True)  # для какого дня — фильтр по дате
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -43,6 +44,7 @@ class Weather(Base):
     id = Column(Integer, primary_key=True, index=True)
     text = Column(Text, nullable=False)
     audio_path = Column(String(1024), default="")
+    broadcast_date = Column(Date, nullable=True, index=True)  # для какого дня — фильтр по дате
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

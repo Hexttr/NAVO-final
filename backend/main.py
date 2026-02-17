@@ -24,9 +24,22 @@ from config import settings
 from services.tts_service import list_voices
 
 
+def _run_migrations():
+    """Add broadcast_date to news/weather if missing."""
+    from sqlalchemy import text
+    for table, col in [("news", "broadcast_date"), ("weather", "broadcast_date")]:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} DATE"))
+                conn.commit()
+        except Exception:
+            pass  # column already exists
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     yield
 

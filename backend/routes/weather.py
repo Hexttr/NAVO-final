@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
-from models import Weather
+from models import Weather, BroadcastItem
 from config import settings
 from pathlib import Path
 from services.weather_service import fetch_weather_forecast
@@ -15,6 +17,7 @@ router = APIRouter(prefix="/weather", tags=["weather"])
 
 class WeatherCreate(BaseModel):
     text: str
+    broadcast_date: date | None = None
 
 
 class WeatherUpdate(BaseModel):
@@ -22,8 +25,14 @@ class WeatherUpdate(BaseModel):
 
 
 @router.get("")
-def list_weather(db: Session = Depends(get_db)):
-    return db.query(Weather).order_by(Weather.id.desc()).all()
+def list_weather(
+    d: date | None = Query(None, description="Фильтр по дате YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Weather).order_by(Weather.id.desc())
+    if d is not None:
+        q = q.filter(or_(Weather.broadcast_date == d, Weather.broadcast_date.is_(None)))
+    return q.all()
 
 
 @router.get("/{weather_id}/audio")
@@ -39,7 +48,7 @@ def get_weather_audio(weather_id: int, db: Session = Depends(get_db)):
 
 @router.post("")
 def create_weather(data: WeatherCreate, db: Session = Depends(get_db)):
-    w = Weather(text=data.text)
+    w = Weather(text=data.text, broadcast_date=data.broadcast_date)
     db.add(w)
     db.commit()
     db.refresh(w)
@@ -47,14 +56,53 @@ def create_weather(data: WeatherCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/generate")
-async def generate_weather(db: Session = Depends(get_db)):
+async def generate_weather(
+    d: date | None = Query(None, description="Дата для новой записи YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
     raw = await fetch_weather_forecast()
     text = await generate_weather_text(raw)
-    w = Weather(text=text)
+    w = Weather(text=text, broadcast_date=d)
     db.add(w)
     db.commit()
     db.refresh(w)
     return w
+
+
+@router.post("/{weather_id}/regenerate")
+async def regenerate_weather(
+    weather_id: int,
+    d: date | None = Query(None, description="Дата эфира — создаётся новая запись на этот день"),
+    broadcast_item_id: int | None = Query(None, description="ID слота в эфире — обновить ссылку"),
+    db: Session = Depends(get_db),
+):
+    """Перегенерировать: создаёт НОВУЮ запись на дату d, обновляет слот. Иначе — перезаписывает текущую."""
+    raw = await fetch_weather_forecast()
+    text = await generate_weather_text(raw)
+
+    if d is not None:
+        w = Weather(text=text, broadcast_date=d)
+        db.add(w)
+        db.commit()
+        db.refresh(w)
+        if broadcast_item_id is not None:
+            slot = db.query(BroadcastItem).filter(
+                BroadcastItem.id == broadcast_item_id,
+                BroadcastItem.entity_type == "weather",
+            ).first()
+            if slot:
+                slot.entity_id = w.id
+                db.commit()
+        return w
+    else:
+        w = db.query(Weather).get(weather_id)
+        if not w:
+            raise HTTPException(404, "Weather not found")
+        w.text = text
+        w.audio_path = ""
+        db.commit()
+        db.refresh(w)
+        return w
 
 
 @router.post("/{weather_id}/tts")

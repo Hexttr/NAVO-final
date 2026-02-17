@@ -9,6 +9,7 @@ Slots:
 """
 from datetime import date
 import random
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from models import Song, News, Weather, Podcast, Intro, BroadcastItem
 
@@ -50,8 +51,19 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
     db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == broadcast_date).delete()
 
     songs = list(db.query(Song).filter(Song.file_path != "").all())
-    news_list = list(db.query(News).filter(News.audio_path != "").all())
-    weather_list = list(db.query(Weather).filter(Weather.audio_path != "").all())
+    # Новости и погода: для даты X — только записи с broadcast_date=X или null (обратная совместимость)
+    news_list = list(
+        db.query(News)
+        .filter(News.audio_path != "")
+        .filter(or_(News.broadcast_date == broadcast_date, News.broadcast_date.is_(None)))
+        .all()
+    )
+    weather_list = list(
+        db.query(Weather)
+        .filter(Weather.audio_path != "")
+        .filter(or_(Weather.broadcast_date == broadcast_date, Weather.broadcast_date.is_(None)))
+        .all()
+    )
     podcasts = list(db.query(Podcast).all())
     intros = list(db.query(Intro).all())
 

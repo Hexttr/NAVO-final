@@ -2,10 +2,46 @@
   display: flex;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
-.broadcast-actions button.confirm {
+.broadcast-actions .broadcast-btn {
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.65rem 1.25rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.broadcast-actions .broadcast-btn-generate {
+  background: linear-gradient(135deg, #805ad5 0%, #d53f8c 100%);
+  color: white;
+}
+.broadcast-actions .broadcast-btn-generate:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.broadcast-actions .broadcast-btn-generate.confirm {
   background: linear-gradient(135deg, #c53030 0%, #9b2c2c 100%);
+}
+
+.broadcast-actions .broadcast-btn-delete {
+  background: linear-gradient(135deg, #7f1d1d 0%, #450a0a 80%);
+  color: #fecaca;
+  box-shadow: 0 2px 8px rgba(127, 29, 29, 0.4);
+}
+.broadcast-actions .broadcast-btn-delete:hover:not(:disabled) {
+  background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 80%);
+  color: #fef2f2;
+  box-shadow: 0 4px 12px rgba(127, 29, 29, 0.5);
+}
+
+.broadcast-actions .broadcast-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .broadcast-grid {
@@ -88,6 +124,7 @@
 }
 .broadcast-table .save-btn,
 .broadcast-table .revoice-btn,
+.broadcast-table .regen-btn,
 .broadcast-table .play-btn {
   height: 2rem;
   padding: 0 0.75rem;
@@ -129,8 +166,16 @@
 .broadcast-table .revoice-btn:hover:not(:disabled) {
   background: #6b46c1;
 }
+.broadcast-table .regen-btn {
+  background: #2b6f5c;
+  color: #a7f3d0;
+}
+.broadcast-table .regen-btn:hover:not(:disabled) {
+  background: #1e4d3f;
+}
 .broadcast-table .save-btn:disabled,
-.broadcast-table .revoice-btn:disabled {
+.broadcast-table .revoice-btn:disabled,
+.broadcast-table .regen-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

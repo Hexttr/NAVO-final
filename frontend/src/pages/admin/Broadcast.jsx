@@ -4,6 +4,7 @@ import {
   getBroadcast,
   getBroadcastNowPlaying,
   generateBroadcast,
+  deleteBroadcast,
   deleteBroadcastItem,
   insertBroadcastItem,
   moveBroadcastItem,
@@ -15,9 +16,12 @@ import {
   updateSong,
   updateNews,
   updateWeather,
+  generateDj,
   generateDjTts,
   generateNewsTts,
   generateWeatherTts,
+  regenerateNewsText,
+  regenerateWeatherText,
   getTtsVoices,
   getSongAudioUrl,
   getSongDjAudioUrl,
@@ -53,6 +57,8 @@ export default function Broadcast() {
   const [editingText, setEditingText] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [revoicingId, setRevoicingId] = useState(null);
+  const [regeneratingId, setRegeneratingId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
@@ -60,6 +66,7 @@ export default function Broadcast() {
   const [playingItemId, setPlayingItemId] = useState(null);
 
   useEffect(() => {
+    setConfirmGen(false);
     load();
   }, [selectedDate]);
 
@@ -96,7 +103,13 @@ export default function Broadcast() {
 
   useEffect(() => {
     if (insertSlot) {
-      Promise.all([getSongs(), getNews(), getWeather(), getPodcasts(), getIntros()]).then(
+      Promise.all([
+        getSongs(),
+        getNews(selectedDate),
+        getWeather(selectedDate),
+        getPodcasts(),
+        getIntros(),
+      ]).then(
         ([songs, news, weather, podcasts, intros]) => {
           const toArr = (x) => (Array.isArray(x) ? x : Array.isArray(x?.items) ? x.items : []);
           setCatalog({
@@ -109,7 +122,7 @@ export default function Broadcast() {
         }
       );
     }
-  }, [insertSlot]);
+  }, [insertSlot, selectedDate]);
 
   const load = () => {
     setLoading(true);
@@ -120,7 +133,8 @@ export default function Broadcast() {
   };
 
   const handleGenerate = async () => {
-    if (!confirmGen) {
+    const hasExistingItems = (data?.items?.length ?? 0) > 0;
+    if (hasExistingItems && !confirmGen) {
       setConfirmGen(true);
       return;
     }
@@ -259,6 +273,36 @@ export default function Broadcast() {
     };
   }, []);
 
+  const handleRegenerateText = async (item) => {
+    setRegeneratingId(item.id);
+    try {
+      if (item.entity_type === "dj") await generateDj(item.entity_id);
+      else if (item.entity_type === "news") await regenerateNewsText(item.entity_id, selectedDate, item.id);
+      else if (item.entity_type === "weather") await regenerateWeatherText(item.entity_id, selectedDate, item.id);
+      const fresh = await getBroadcast(selectedDate);
+      const updated = fresh?.items?.find((i) => i.id === item.id);
+      setEditingText(updated?.text || "");
+      setData(fresh);
+    } catch (e) {
+      alert(e.message || "Ошибка перегенерации");
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
+
+  const handleDeleteBroadcast = async () => {
+    if (!confirm(`Удалить весь эфир на ${selectedDate}?`)) return;
+    setDeleting(true);
+    try {
+      await deleteBroadcast(selectedDate);
+      load();
+    } catch (e) {
+      alert(e.message || "Ошибка удаления");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleRevoice = async (item) => {
     setRevoicingId(item.id);
     try {
@@ -289,15 +333,22 @@ export default function Broadcast() {
     <div className="broadcast-page">
       <div className="broadcast-actions">
         <button
-          className={`primary ${confirmGen ? "confirm" : ""}`}
+          className={`broadcast-btn broadcast-btn-generate ${confirmGen ? "confirm" : ""}`}
           onClick={handleGenerate}
           disabled={loading || generating}
         >
-          {confirmGen ? "Подтвердить перезапись?" : "Сгенерировать эфир"}
+          {confirmGen ? "ПОДТВЕРДИТЬ ПЕРЕЗАПИСЬ?" : "СГЕНЕРИРОВАТЬ ЭФИР"}
         </button>
         {confirmGen && (
-          <button onClick={() => setConfirmGen(false)}>Отмена</button>
+          <button className="broadcast-btn" onClick={() => setConfirmGen(false)}>ОТМЕНА</button>
         )}
+        <button
+          className="broadcast-btn broadcast-btn-delete"
+          onClick={handleDeleteBroadcast}
+          disabled={loading || deleting || items.length === 0}
+        >
+          {deleting ? "…" : "УДАЛИТЬ ЭФИР"}
+        </button>
       </div>
 
       {loading ? (
@@ -422,6 +473,15 @@ export default function Broadcast() {
                                 </select>
                               </div>
                             )}
+                            <button
+                              type="button"
+                              className="regen-btn"
+                              onClick={() => handleRegenerateText(item)}
+                              disabled={regeneratingId === item.id}
+                              title="Получить новый текст из источников (RSS/прогноз)"
+                            >
+                              {regeneratingId === item.id ? "…" : <><span>🔄</span> Перегенерировать текст</>}
+                            </button>
                             <button
                               type="button"
                               className="save-btn"
