@@ -115,6 +115,10 @@ export async function generateNewsTts(newsId, voice = "ru-RU-DmitryNeural") {
   return r.json();
 }
 
+export function getNewsAudioUrl(newsId) {
+  return `${API.replace("/api", "")}/api/news/${newsId}/audio`;
+}
+
 export async function updateNews(newsId, text) {
   const r = await fetch(`${API}/news/${newsId}`, {
     method: "PATCH",
@@ -151,6 +155,10 @@ export async function generateWeather() {
 export async function generateWeatherTts(weatherId, voice = "ru-RU-DmitryNeural") {
   const r = await fetch(`${API}/weather/${weatherId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
   return r.json();
+}
+
+export function getWeatherAudioUrl(weatherId) {
+  return `${API.replace("/api", "")}/api/weather/${weatherId}/audio`;
 }
 
 export async function updateWeather(weatherId, text) {

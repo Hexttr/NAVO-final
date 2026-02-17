@@ -119,10 +119,11 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
             song = next_song()
             dj_sec = 45
             song_sec = int(song.duration_seconds or 180)
-            total = dj_sec + song_sec
+            total = (dj_sec if song.dj_audio_path else 0) + song_sec
             if total <= gap:
-                blocks.append((current_sec, "dj", song.id, dj_sec, f"DJ: {song.artist} - {song.title}"))
-                current_sec += dj_sec
+                if song.dj_audio_path:
+                    blocks.append((current_sec, "dj", song.id, dj_sec, f"DJ: {song.artist} - {song.title}"))
+                    current_sec += dj_sec
                 blocks.append((current_sec, "song", song.id, song_sec, f"{song.artist} - {song.title}"))
                 current_sec += song_sec
                 gap = t_sec - current_sec
@@ -136,11 +137,12 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         song = next_song()
         dj_sec = 45
         song_sec = int(song.duration_seconds or 180)
-        total = dj_sec + song_sec
+        total = (dj_sec if song.dj_audio_path else 0) + song_sec
         if current_sec + total > day_end:
             break
-        blocks.append((current_sec, "dj", song.id, dj_sec, f"DJ: {song.artist} - {song.title}"))
-        current_sec += dj_sec
+        if song.dj_audio_path:
+            blocks.append((current_sec, "dj", song.id, dj_sec, f"DJ: {song.artist} - {song.title}"))
+            current_sec += dj_sec
         blocks.append((current_sec, "song", song.id, song_sec, f"{song.artist} - {song.title}"))
         current_sec += song_sec
 

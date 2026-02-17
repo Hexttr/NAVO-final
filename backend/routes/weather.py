@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
@@ -23,6 +24,17 @@ class WeatherUpdate(BaseModel):
 @router.get("")
 def list_weather(db: Session = Depends(get_db)):
     return db.query(Weather).order_by(Weather.id.desc()).all()
+
+
+@router.get("/{weather_id}/audio")
+def get_weather_audio(weather_id: int, db: Session = Depends(get_db)):
+    w = db.query(Weather).get(weather_id)
+    if not w or not w.audio_path:
+        raise HTTPException(404, "Audio not found")
+    path = Path(w.audio_path)
+    if not path.exists():
+        raise HTTPException(404, "File not found")
+    return FileResponse(path, media_type="audio/mpeg")
 
 
 @router.post("")

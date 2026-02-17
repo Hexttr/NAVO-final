@@ -124,6 +124,15 @@
   background: linear-gradient(90deg, #805ad5, #d53f8c);
   transition: width 0.2s ease;
 }
+.progress-indeterminate {
+  width: 40%;
+  animation: progress-slide 1.5s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  0% { margin-left: 0; }
+  50% { margin-left: 60%; }
+  100% { margin-left: 0; }
+}
 .progress-text {
   font-size: 0.9rem;
   color: #a0aec0;

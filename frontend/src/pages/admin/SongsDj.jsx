@@ -25,6 +25,7 @@ export default function SongsDj() {
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const [jamendoProgress, setJamendoProgress] = useState(null);
   const [djBatchProgress, setDjBatchProgress] = useState(null);
+  const [ttsBatchProgress, setTtsBatchProgress] = useState(null);
   const [playingId, setPlayingId] = useState(null);
   const [playingDjId, setPlayingDjId] = useState(null);
   const audioRef = useRef(null);
@@ -110,6 +111,27 @@ export default function SongsDj() {
     }
   };
 
+  const handleTtsAll = async () => {
+    const ids = songs.filter((s) => s.dj_text && !s.dj_audio_path).map((s) => s.id);
+    if (!ids.length) {
+      alert("Нет треков с текстом DJ для озвучки");
+      return;
+    }
+    setTtsBatchProgress({ current: 0, total: ids.length });
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        const res = await generateDjTts(ids[i], selectedVoice);
+        setSongs((prev) =>
+          prev.map((s) => (s.id === ids[i] ? { ...s, dj_audio_path: res.audio_path } : s))
+        );
+      } catch (e) {
+        console.warn(`TTS для ${ids[i]} не выполнен:`, e);
+      }
+      setTtsBatchProgress({ current: i + 1, total: ids.length });
+    }
+    setTtsBatchProgress(null);
+  };
+
   const handleSaveDj = async (songId, text) => {
     await updateSong(songId, { dj_text: text });
     setEditingDj(null);
@@ -172,9 +194,15 @@ export default function SongsDj() {
         </button>
         <button
           onClick={handleGenerateDjAll}
-          disabled={loading || !!jamendoProgress || !!djBatchProgress || !songs.length}
+          disabled={loading || !!jamendoProgress || !!djBatchProgress || !!ttsBatchProgress || !songs.length}
         >
           Сгенерировать DJ для всех
+        </button>
+        <button
+          onClick={handleTtsAll}
+          disabled={loading || !!jamendoProgress || !!djBatchProgress || !!ttsBatchProgress || !songs.filter((s) => s.dj_text && !s.dj_audio_path).length}
+        >
+          Озвучить DJ для всех
         </button>
       </div>
       {djBatchProgress && (
@@ -187,6 +215,19 @@ export default function SongsDj() {
           </div>
           <span className="progress-text">
             Генерируется DJ: {djBatchProgress.current}/{djBatchProgress.total}
+          </span>
+        </div>
+      )}
+      {ttsBatchProgress && (
+        <div className="jamendo-progress">
+          <div className="progress-bar">
+            <div
+              className="progress-fill"
+              style={{ width: `${(ttsBatchProgress.current / ttsBatchProgress.total) * 100}%` }}
+            />
+          </div>
+          <span className="progress-text">
+            Озвучивается DJ: {ttsBatchProgress.current}/{ttsBatchProgress.total}
           </span>
         </div>
       )}
