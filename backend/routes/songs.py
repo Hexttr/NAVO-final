@@ -1,8 +1,9 @@
 import json
+import random
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
@@ -34,6 +35,30 @@ class SongUpdate(BaseModel):
 @router.get("")
 def list_songs(db: Session = Depends(get_db)):
     return db.query(Song).order_by(Song.id.desc()).all()
+
+
+@router.get("/{song_id}/audio")
+def get_song_audio(song_id: int, db: Session = Depends(get_db)):
+    song = db.query(Song).get(song_id)
+    if not song or not song.file_path:
+        raise HTTPException(404, "Audio not found")
+    path = Path(song.file_path)
+    if not path.exists():
+        path = UPLOAD_DIR / path.name
+    if not path.exists():
+        raise HTTPException(404, "File not found")
+    return FileResponse(path, media_type="audio/mpeg")
+
+
+@router.get("/{song_id}/dj-audio")
+def get_song_dj_audio(song_id: int, db: Session = Depends(get_db)):
+    song = db.query(Song).get(song_id)
+    if not song or not song.dj_audio_path:
+        raise HTTPException(404, "DJ audio not found")
+    path = Path(song.dj_audio_path)
+    if not path.exists():
+        raise HTTPException(404, "File not found")
+    return FileResponse(path, media_type="audio/mpeg")
 
 
 @router.post("")
@@ -149,8 +174,10 @@ async def generate_dj(song_id: int, db: Session = Depends(get_db)):
     song = db.query(Song).get(song_id)
     if not song:
         raise HTTPException(404, "Song not found")
-    text = await generate_dj_text(song.artist, song.title, song.album)
+    greeting_allowed = random.random() < 0.1
+    text = await generate_dj_text(song.artist, song.title, song.album, greeting_allowed)
     song.dj_text = text
+    song.dj_audio_path = ""  # сброс озвучки при смене текста
     db.commit()
     return {"dj_text": text}
 
@@ -176,8 +203,10 @@ async def generate_dj_batch(song_ids: list[int] = Query(..., alias="song_ids"), 
         song = db.query(Song).get(sid)
         if song:
             try:
-                text = await generate_dj_text(song.artist, song.title, song.album)
+                greeting_allowed = random.random() < 0.1
+                text = await generate_dj_text(song.artist, song.title, song.album, greeting_allowed)
                 song.dj_text = text
+                song.dj_audio_path = ""
                 db.commit()
                 results.append({"id": sid, "dj_text": text})
             except Exception as e:

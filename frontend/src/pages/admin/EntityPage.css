@@ -69,6 +69,22 @@
   flex-wrap: wrap;
 }
 
+.play-btn-small {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #2d2d3a;
+}
+.play-btn-small:hover {
+  background: #805ad5;
+  color: white;
+}
+
 .upload-btn {
   cursor: pointer;
   padding: 0.35em 0.75em;

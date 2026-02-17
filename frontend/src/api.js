@@ -10,6 +10,14 @@ export async function getSongs() {
   return r.json();
 }
 
+export function getSongAudioUrl(songId) {
+  return `${API.replace("/api", "")}/api/songs/${songId}/audio`;
+}
+
+export function getSongDjAudioUrl(songId) {
+  return `${API.replace("/api", "")}/api/songs/${songId}/dj-audio`;
+}
+
 export async function createSong(data) {
   const r = await fetch(`${API}/songs`, {
     method: "POST",
@@ -52,7 +60,9 @@ export function generateFromJamendoStream(onProgress) {
 
 export async function generateDj(songId) {
   const r = await fetch(`${API}/songs/${songId}/generate-dj`, { method: "POST" });
-  return r.json();
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || "Ошибка");
+  return data;
 }
 
 export async function generateDjBatch(songIds) {

@@ -5,13 +5,16 @@ GROQ_API = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.1-8b-instant"
 
 
-async def generate_dj_text(artist: str, title: str, album: str = "") -> str:
+async def generate_dj_text(artist: str, title: str, album: str = "", greeting_allowed: bool = False) -> str:
     prompt = """Ты Диджей NAVO RADIO. Представь трек, который сейчас будет играть в эфире.
 Проанализируй Автора, название песни, альбом.
 Расскажи о стиле песни, что-то интересное об альбоме или авторе.
-5-6 предложений."""
+5-6 предложений.
+ВАЖНО: Здороваться со слушателями можно только в 1 из 10 случаев. В большинстве случаев сразу переходи к представлению трека без приветствия."""
 
     content = f"Автор: {artist}\nНазвание: {title}\nАльбом: {album or 'не указан'}"
+    if greeting_allowed:
+        content += "\n\n[Можно начать с приветствия слушателей.]"
     return await _call_groq(prompt, content)
 
 

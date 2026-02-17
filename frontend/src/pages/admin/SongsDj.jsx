@@ -1,15 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   getSongs,
   createSong,
   uploadSongFile,
   generateFromJamendoStream,
   generateDj,
-  generateDjBatch,
   generateDjTts,
   updateSong,
   deleteSong,
   getTtsVoices,
+  getSongAudioUrl,
+  getSongDjAudioUrl,
 } from "../../api";
 import "./EntityPage.css";
 
@@ -23,6 +24,10 @@ export default function SongsDj() {
   const [editingDj, setEditingDj] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const [jamendoProgress, setJamendoProgress] = useState(null);
+  const [djBatchProgress, setDjBatchProgress] = useState(null);
+  const [playingId, setPlayingId] = useState(null);
+  const [playingDjId, setPlayingDjId] = useState(null);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     load();
@@ -81,13 +86,19 @@ export default function SongsDj() {
       alert("Нет песен с загруженным файлом");
       return;
     }
-    setLoading(true);
-    try {
-      await generateDjBatch(ids);
-      load();
-    } finally {
-      setLoading(false);
+    setDjBatchProgress({ current: 0, total: ids.length });
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        const res = await generateDj(ids[i]);
+        setSongs((prev) =>
+          prev.map((s) => (s.id === ids[i] ? { ...s, dj_text: res.dj_text, dj_audio_path: "" } : s))
+        );
+      } catch (e) {
+        console.warn(`DJ для ${ids[i]} не сгенерирован:`, e);
+      }
+      setDjBatchProgress({ current: i + 1, total: ids.length });
     }
+    setDjBatchProgress(null);
   };
 
   const handleTts = async (songId) => {
@@ -111,6 +122,36 @@ export default function SongsDj() {
     load();
   };
 
+  const handlePlay = (song) => {
+    if (!song.file_path) return;
+    const audio = audioRef.current;
+    const url = getSongAudioUrl(song.id);
+    if (playingId === song.id && audio && !audio.paused) {
+      audio.pause();
+      setPlayingId(null);
+    } else {
+      setPlayingDjId(null);
+      audio.src = url;
+      audio.play();
+      setPlayingId(song.id);
+    }
+  };
+
+  const handlePlayDj = (song) => {
+    if (!song.dj_audio_path) return;
+    const audio = audioRef.current;
+    const url = getSongDjAudioUrl(song.id);
+    if (playingDjId === song.id && audio && !audio.paused) {
+      audio.pause();
+      setPlayingDjId(null);
+    } else {
+      setPlayingId(null);
+      audio.src = url;
+      audio.play();
+      setPlayingDjId(song.id);
+    }
+  };
+
   if (loading && !songs.length) return <div className="loading">Загрузка...</div>;
 
   return (
@@ -129,10 +170,26 @@ export default function SongsDj() {
         <button className="primary" onClick={handleJamendo} disabled={!!jamendoProgress}>
           Сгенерировать из Jamendo
         </button>
-        <button onClick={handleGenerateDjAll} disabled={loading || !!jamendoProgress || !songs.length}>
+        <button
+          onClick={handleGenerateDjAll}
+          disabled={loading || !!jamendoProgress || !!djBatchProgress || !songs.length}
+        >
           Сгенерировать DJ для всех
         </button>
       </div>
+      {djBatchProgress && (
+        <div className="jamendo-progress">
+          <div className="progress-bar">
+            <div
+              className="progress-fill"
+              style={{ width: `${(djBatchProgress.current / djBatchProgress.total) * 100}%` }}
+            />
+          </div>
+          <span className="progress-text">
+            Генерируется DJ: {djBatchProgress.current}/{djBatchProgress.total}
+          </span>
+        </div>
+      )}
       {jamendoProgress && (
         <div className="jamendo-progress">
           <div className="progress-bar">
@@ -157,9 +214,11 @@ export default function SongsDj() {
         </select>
       </div>
 
+      <audio ref={audioRef} onEnded={() => { setPlayingId(null); setPlayingDjId(null); }} />
       <table className="entity-table">
         <thead>
           <tr>
+            <th></th>
             <th>#</th>
             <th>Автор</th>
             <th>Название</th>
@@ -171,6 +230,17 @@ export default function SongsDj() {
         <tbody>
           {songs.map((s, i) => (
             <tr key={s.id}>
+              <td>
+                {s.file_path && (
+                  <button
+                    className="play-btn-small"
+                    onClick={() => handlePlay(s)}
+                    title={playingId === s.id ? "Стоп" : "Слушать"}
+                  >
+                    {playingId === s.id ? "⏹" : "▶"}
+                  </button>
+                )}
+              </td>
               <td>{i + 1}</td>
               <td>{s.artist}</td>
               <td>{s.title}</td>
@@ -191,6 +261,11 @@ export default function SongsDj() {
                     <span className="dj-text">{s.dj_text || "—"}</span>
                     <div className="dj-actions">
                       <button onClick={() => setEditingDj(s.id)}>Редактировать</button>
+                      {s.dj_audio_path && (
+                        <button onClick={() => handlePlayDj(s)}>
+                          {playingDjId === s.id ? "Стоп" : "Воспроизвести"}
+                        </button>
+                      )}
                       {!s.dj_text && (
                         <button onClick={() => handleGenerateDj(s.id)}>Сгенерировать</button>
                       )}
