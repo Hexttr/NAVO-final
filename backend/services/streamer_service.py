@@ -58,23 +58,39 @@ def _skip_id3_and_find_sync(f) -> None:
     f.seek(0)
 
 
-def _resolve_path(p: Path) -> Path | None:
+def _resolve_path(p: Path, entity_type: str = "", entity_id: int = 0) -> Path | None:
     """Try to resolve path; return None if file doesn't exist."""
     p = Path(str(p).replace("\\", "/"))
     if p.exists():
         return p
+    base = PROJECT_ROOT / settings.upload_dir
+    # PROJECT_ROOT/uploads/dj/xxx, PROJECT_ROOT/uploads/songs/xxx
     alt = PROJECT_ROOT / p
     if alt.exists():
         return alt
-    base = PROJECT_ROOT / settings.upload_dir
-    alt = base / p.name
-    if alt.exists():
-        return alt
-    # uploads/dj/xxx -> base/dj/xxx
     if len(p.parts) >= 2:
         alt = base / p.parts[-2] / p.name
         if alt.exists():
             return alt
+    alt = base / p.name
+    if alt.exists():
+        return alt
+    # Backend runs from backend/ — uploads may be backend/uploads/
+    backend_uploads = PROJECT_ROOT / "backend" / settings.upload_dir
+    if backend_uploads.exists():
+        alt = backend_uploads / p.name
+        if alt.exists():
+            return alt
+        if len(p.parts) >= 2:
+            alt = backend_uploads / p.parts[-2] / p.name
+            if alt.exists():
+                return alt
+    # DJ: explicit dj/dj_{id}.mp3
+    if entity_type == "dj" and entity_id:
+        for root in (base, backend_uploads, Path.cwd() / settings.upload_dir):
+            alt = root / "dj" / f"dj_{entity_id}.mp3"
+            if alt.exists():
+                return alt
     alt = Path.cwd() / p
     if alt.exists():
         return alt
@@ -116,15 +132,15 @@ def _get_audio_path(db: Session, entity_type: str, entity_id: int) -> Path | Non
         p = Path(i.file_path)
     else:
         return None
-    return _resolve_path(p)
+    return _resolve_path(p, entity_type, entity_id)
 
 
 CHUNK_SIZE = 32 * 1024  # 32 KB
 
 
-def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Path, int, float]]:
+def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Path, int, float, str]]:
     """
-    Get playlist: list of (path, start_sec, duration_sec).
+    Get playlist: list of (path, start_sec, duration_sec, entity_type).
     start_sec = seconds since midnight (Moscow).
     """
     items = (
@@ -142,11 +158,11 @@ def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Pat
         if p:
             start_sec = _parse_time(item.start_time)
             dur = float(item.duration_seconds or 0)
-            result.append((p, start_sec, dur))
+            result.append((p, start_sec, dur, item.entity_type))
     return result
 
 
-def _find_current_position(playlist: list[tuple[Path, int, float]], now_sec: int) -> tuple[int, int]:
+def _find_current_position(playlist: list[tuple], now_sec: int) -> tuple[int, int]:
     """
     Find (playlist_index, seek_sec) for current Moscow time.
     seek_sec = seconds to skip within the current file (0 if at start).
@@ -164,7 +180,7 @@ def _find_current_position(playlist: list[tuple[Path, int, float]], now_sec: int
     return 0, 0
 
 
-async def stream_broadcast(playlist: list[tuple[Path, int, float]], sync_to_moscow: bool = True):
+async def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
     """
     Async generator: yields MP3 bytes. Бесконечный цикл — поток не обрывается.
     If sync_to_moscow=True, starts from current Moscow time position.
@@ -180,7 +196,7 @@ async def stream_broadcast(playlist: list[tuple[Path, int, float]], sync_to_mosc
     idx = start_idx
     first_round = True
     while True:
-        path, _, duration_sec = playlist[idx]
+        path, _, duration_sec, entity_type = playlist[idx]
         skip_bytes = 0
         if first_round and idx == start_idx and seek_sec > 0 and duration_sec > 0:
             try:
@@ -190,6 +206,14 @@ async def stream_broadcast(playlist: list[tuple[Path, int, float]], sync_to_mosc
             except OSError:
                 pass
         try:
+            path = path.resolve()  # Абсолютный путь — надёжнее на Windows
+            size = path.stat().st_size
+            if size < 100:  # Пустой/битый файл — пропускаем
+                idx += 1
+                if idx >= len(playlist):
+                    idx = 0
+                    first_round = False
+                continue
             with open(path, "rb") as f:
                 if skip_bytes:
                     skip_bytes = _find_mp3_frame_sync(f, skip_bytes)
