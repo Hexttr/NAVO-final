@@ -20,7 +20,10 @@ export default function AdminLayout() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    getStats().then(setStats).catch(() => setStats({}));
+    const fetchStats = () => getStats().then(setStats).catch(() => setStats({}));
+    fetchStats();
+    const interval = setInterval(fetchStats, 10000); // обновление каждые 10 сек
+    return () => clearInterval(interval);
   }, []);
 
   const today = new Date().toISOString().slice(0, 10);
