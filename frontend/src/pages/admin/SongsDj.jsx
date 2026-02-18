@@ -13,6 +13,8 @@ import {
   getSongAudioUrl,
   getSongDjAudioUrl,
 } from "../../api";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 import "./EntityPage.css";
 
 export default function SongsDj() {
@@ -99,6 +101,7 @@ export default function SongsDj() {
         console.warn(`DJ для ${ids[i]} не сгенерирован:`, e);
       }
       setDjBatchProgress({ current: i + 1, total: ids.length });
+      if (i < ids.length - 1) await sleep(2100);
     }
     setDjBatchProgress(null);
   };

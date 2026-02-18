@@ -1,3 +1,4 @@
+import asyncio
 import json
 import random
 import uuid
@@ -198,8 +199,12 @@ async def generate_dj_audio(song_id: int, voice: str = "ru-RU-DmitryNeural", db:
 
 @router.post("/generate-dj-batch")
 async def generate_dj_batch(song_ids: list[int] = Query(..., alias="song_ids"), db: Session = Depends(get_db)):
+    from services.groq_service import RATE_LIMIT_DELAY
+
     results = []
-    for sid in song_ids:
+    for i, sid in enumerate(song_ids):
+        if i > 0:
+            await asyncio.sleep(RATE_LIMIT_DELAY)
         song = db.query(Song).get(sid)
         if song:
             try:

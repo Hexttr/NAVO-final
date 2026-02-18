@@ -1,8 +1,11 @@
+import asyncio
 import httpx
 from config import settings
 
 GROQ_API = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.1-8b-instant"
+# Groq free tier: 30 RPM. Задержка ~2.1 сек между запросами = ~28 RPM
+RATE_LIMIT_DELAY = 2.1
 
 
 async def generate_dj_text(artist: str, title: str, album: str = "", greeting_allowed: bool = False) -> str:
@@ -37,23 +40,31 @@ async def generate_weather_text(weather_data: str) -> str:
 
 
 async def _call_groq(system_prompt: str, user_content: str) -> str:
-    async with httpx.AsyncClient() as client:
-        r = await client.post(
-            GROQ_API,
-            headers={
-                "Authorization": f"Bearer {settings.groq_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                "temperature": 0.7,
-            },
-            timeout=60.0,
-        )
-        r.raise_for_status()
-        data = r.json()
-        return data["choices"][0]["message"]["content"].strip()
+    last_err = None
+    for attempt in range(4):
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                GROQ_API,
+                headers={
+                    "Authorization": f"Bearer {settings.groq_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": 0.7,
+                },
+                timeout=60.0,
+            )
+            if r.status_code == 429:
+                wait = 2 ** attempt * 5
+                await asyncio.sleep(wait)
+                last_err = f"Rate limit (429), retry {attempt + 1}/4"
+                continue
+            r.raise_for_status()
+            data = r.json()
+            return data["choices"][0]["message"]["content"].strip()
+    raise RuntimeError(last_err or "Groq API error")

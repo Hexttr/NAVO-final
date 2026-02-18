@@ -1,5 +1,6 @@
 # Environment
 .env
+deploy/setup_with_keys.py
 .env.local
 .env.*.local
 
