@@ -13,7 +13,15 @@ APP_DIR = "/opt/navo-radio"
 # Локальные пути -> удалённые пути (добавляйте при изменении)
 FILES = [
     ("backend/services/streamer_service.py", f"{APP_DIR}/backend/services/streamer_service.py"),
+    ("backend/services/broadcast_service.py", f"{APP_DIR}/backend/services/broadcast_service.py"),
+    ("backend/services/broadcast_generator.py", f"{APP_DIR}/backend/services/broadcast_generator.py"),
     ("backend/icecast_source.py", f"{APP_DIR}/backend/icecast_source.py"),
+    ("backend/routes/broadcast.py", f"{APP_DIR}/backend/routes/broadcast.py"),
+    ("backend/routes/podcasts.py", f"{APP_DIR}/backend/routes/podcasts.py"),
+    ("backend/routes/intros.py", f"{APP_DIR}/backend/routes/intros.py"),
+    ("frontend/src/api.js", f"{APP_DIR}/frontend/src/api.js"),
+    ("frontend/src/pages/admin/Broadcast.jsx", f"{APP_DIR}/frontend/src/pages/admin/Broadcast.jsx"),
+    ("frontend/src/pages/admin/Broadcast.css", f"{APP_DIR}/frontend/src/pages/admin/Broadcast.css"),
 ]
 
 
@@ -50,6 +58,9 @@ def main():
             sftp.put(local_path, remote_path)
 
         sftp.close()
+
+        print("\nСборка frontend...")
+        run(client, f"cd {APP_DIR}/frontend && VITE_API_URL=https://navoradio.com npm run build", check=False)
 
         print("\nПерезапуск сервисов...")
         run(client, "systemctl restart navo-radio")
