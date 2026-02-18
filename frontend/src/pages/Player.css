@@ -70,6 +70,24 @@
   margin-bottom: 0.5rem;
 }
 
+.player-now-playing {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 12px 24px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.player-now-playing strong {
+  color: var(--text-primary);
+}
+
 .player-error {
   color: var(--brand-primary-hover);
   font-size: 0.85rem;

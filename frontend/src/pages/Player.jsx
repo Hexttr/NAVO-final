@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
-import { getBroadcastPlaylistUrls } from "../api";
+import { getBroadcastPlaylistUrls, getBroadcastNowPlaying } from "../api";
 import "./Player.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -60,6 +60,34 @@ export default function Player() {
     audioRef.current.play().catch((e) => setError("Не удалось воспроизвести"));
     setPlaying(true);
   };
+
+  useEffect(() => {
+    if (!playing || items.length === 0) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const poll = async () => {
+      try {
+        const np = await getBroadcastNowPlaying(today);
+        if (np?.entityType != null && np?.entityId != null) {
+          const idx = items.findIndex(
+            (it) => it.type === np.entityType && it.entity_id === np.entityId
+          );
+          if (idx >= 0 && idx !== currentIndex) {
+            setCurrentIndex(idx);
+            const item = items[idx];
+            const fullUrl = item?.url?.startsWith("http") ? item.url : `${API_BASE}${item?.url || ""}`;
+            if (audioRef.current) {
+              audioRef.current.src = fullUrl;
+              audioRef.current.play().catch(() => {});
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    const id = setInterval(poll, 60000);
+    return () => clearInterval(id);
+  }, [playing, items, currentIndex]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -177,6 +205,11 @@ export default function Player() {
             />
           ))}
         </div>
+      )}
+      {playing && items[currentIndex]?.title && (
+        <p className="player-now-playing">
+          Сейчас играет: {items[currentIndex].title}
+        </p>
       )}
       <audio
         ref={audioRef}

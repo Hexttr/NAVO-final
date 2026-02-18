@@ -42,7 +42,12 @@ def get_playlist_urls(
     base = "http://localhost:8000/api"
     result = []
     for it in items:
-        rec = {"url": "", "type": it.entity_type, "entity_id": it.entity_id}
+        rec = {
+            "url": "",
+            "type": it.entity_type,
+            "entity_id": it.entity_id,
+            "title": get_entity_meta(db, it.entity_type, it.entity_id),
+        }
         if it.entity_type == "song":
             rec["url"] = f"{base}/songs/{it.entity_id}/audio"
         elif it.entity_type == "dj":
@@ -59,7 +64,8 @@ def get_playlist_urls(
             result.append(rec)
     start_index = 0
     if sync and result:
-        now = datetime.now(timezone(timedelta(hours=3)))
+        moscow_tz = timezone(timedelta(hours=3))
+        now = datetime.now(moscow_tz)
         now_sec = now.hour * 3600 + now.minute * 60 + now.second
         for i, it in enumerate(items):
             parts = (it.start_time or "00:00:00").split(":")
@@ -71,6 +77,8 @@ def get_playlist_urls(
             if now_sec < start_sec:
                 start_index = i
                 break
+        else:
+            start_index = len(result) - 1 if result else 0
     return {"date": str(d), "items": result, "startIndex": start_index}
 
 
