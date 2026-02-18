@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useOutletContext } from "react-router-dom";
+import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2 } from "lucide-react";
 import {
   getBroadcast,
   getBroadcastNowPlaying,
@@ -332,23 +333,32 @@ export default function Broadcast() {
   return (
     <div className="broadcast-page">
       <div className="broadcast-actions">
-        <button
-          className={`broadcast-btn broadcast-btn-generate ${confirmGen ? "confirm" : ""}`}
-          onClick={handleGenerate}
-          disabled={loading || generating}
-        >
-          {confirmGen ? "ПОДТВЕРДИТЬ ПЕРЕЗАПИСЬ?" : "СГЕНЕРИРОВАТЬ ЭФИР"}
-        </button>
-        {confirmGen && (
-          <button className="broadcast-btn" onClick={() => setConfirmGen(false)}>ОТМЕНА</button>
-        )}
-        <button
-          className="broadcast-btn broadcast-btn-delete"
-          onClick={handleDeleteBroadcast}
-          disabled={loading || deleting || items.length === 0}
-        >
-          {deleting ? "…" : "УДАЛИТЬ ЭФИР"}
-        </button>
+        <div className="broadcast-actions-left">
+          <button
+            className={`broadcast-btn broadcast-btn-generate ${confirmGen ? "confirm" : ""}`}
+            onClick={handleGenerate}
+            disabled={loading || generating}
+          >
+            <Sparkles size={16} />
+            {confirmGen ? "ПОДТВЕРДИТЬ ПЕРЕЗАПИСЬ?" : "Сгенерировать эфир"}
+          </button>
+          {confirmGen && (
+            <button className="broadcast-btn broadcast-btn-cancel" onClick={() => setConfirmGen(false)}>
+              Отмена
+            </button>
+          )}
+          <button
+            className="broadcast-btn broadcast-btn-delete"
+            onClick={handleDeleteBroadcast}
+            disabled={loading || deleting || items.length === 0}
+          >
+            <Trash2 size={16} />
+            {deleting ? "…" : "Удалить эфир"}
+          </button>
+        </div>
+        <div className="broadcast-actions-count">
+          {items.length} элементов
+        </div>
       </div>
 
       {loading ? (
@@ -419,7 +429,7 @@ export default function Broadcast() {
                               title="Редактировать"
                               data-no-drag
                             >
-                              ✎
+                              <Pencil size={14} />
                             </button>
                           )}
                           {hasAudio(item) && (
@@ -430,7 +440,7 @@ export default function Broadcast() {
                               title={playingItemId === item.id ? "Стоп" : "Слушать"}
                               data-no-drag
                             >
-                              {playingItemId === item.id ? "⏹" : "▶"}
+                              {playingItemId === item.id ? <Square size={14} /> : <Play size={14} />}
                             </button>
                           )}
                           <button
@@ -441,7 +451,7 @@ export default function Broadcast() {
                             aria-label="Удалить"
                             data-no-drag
                           >
-                            ✕
+                            <X size={14} />
                           </button>
                         </>
                       )}
@@ -480,7 +490,7 @@ export default function Broadcast() {
                               disabled={regeneratingId === item.id}
                               title="Получить новый текст из источников (RSS/прогноз)"
                             >
-                              {regeneratingId === item.id ? "…" : <><span>🔄</span> Перегенерировать текст</>}
+                              {regeneratingId === item.id ? "…" : <><RotateCcw size={14} /> Перегенерировать текст</>}
                             </button>
                             <button
                               type="button"
@@ -488,7 +498,7 @@ export default function Broadcast() {
                               onClick={() => handleSaveText(item)}
                               disabled={savingId === item.id || editingText.trim() === (item.text || "").trim()}
                             >
-                              {savingId === item.id ? "…" : <><span>💾</span> Сохранить</>}
+                              {savingId === item.id ? "…" : <><Save size={14} /> Сохранить</>}
                             </button>
                             <button
                               type="button"
@@ -496,7 +506,7 @@ export default function Broadcast() {
                               onClick={() => handleRevoice(item)}
                               disabled={revoicingId === item.id}
                             >
-                              {revoicingId === item.id ? "…" : <><span>🔊</span> Переозвучить</>}
+                              {revoicingId === item.id ? "…" : <><Volume2 size={14} /> Переозвучить</>}
                             </button>
                             <button
                               type="button"
@@ -504,7 +514,7 @@ export default function Broadcast() {
                               onClick={() => handlePlay(item)}
                               title={playingItemId === item.id ? "Стоп" : "Слушать"}
                             >
-                              {playingItemId === item.id ? <><span>⏸</span> Стоп</> : <><span>▶</span> Слушать</>}
+                              {playingItemId === item.id ? <><Square size={14} /> Стоп</> : <><Play size={14} /> Слушать</>}
                             </button>
                           </div>
                         </div>

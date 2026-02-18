@@ -1,14 +1,16 @@
 import { Outlet, NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { Radio, Calendar, LayoutGrid, Music, Newspaper, CloudSun, Podcast, Mic } from "lucide-react";
 import { getStats } from "../../api";
 import "./AdminLayout.css";
 
 const NAV_ITEMS = [
-  { path: "songs", label: "Песни / DJ" },
-  { path: "news", label: "Новости" },
-  { path: "weather", label: "Погода" },
-  { path: "podcasts", label: "Подкасты" },
-  { path: "intros", label: "ИНТРО" },
+  { path: "", label: "Сетка эфира", icon: LayoutGrid, countKey: null },
+  { path: "songs", label: "Песни / DJ", icon: Music, countKey: "songs" },
+  { path: "news", label: "Новости", icon: Newspaper, countKey: "news" },
+  { path: "weather", label: "Погода", icon: CloudSun, countKey: "weather" },
+  { path: "podcasts", label: "Подкасты", icon: Podcast, countKey: "podcasts" },
+  { path: "intros", label: "Интро", icon: Mic, countKey: "intros" },
 ];
 
 export default function AdminLayout() {
@@ -17,50 +19,68 @@ export default function AdminLayout() {
     const d = new Date();
     return d.toISOString().slice(0, 10);
   });
+
   useEffect(() => {
     const fetchStats = () => getStats().then(setStats).catch(() => setStats({}));
     fetchStats();
-    const interval = setInterval(fetchStats, 10000); // обновление каждые 10 сек
+    const interval = setInterval(fetchStats, 10000);
     return () => clearInterval(interval);
   }, []);
-
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="admin-layout">
       <header className="admin-header">
-        <div className="comets">
+        <div className="admin-comets">
           <span className="comet" style={{ animationDelay: "0s" }} />
           <span className="comet" style={{ animationDelay: "3s" }} />
           <span className="comet" style={{ animationDelay: "6s" }} />
           <span className="comet" style={{ animationDelay: "2s" }} />
           <span className="comet" style={{ animationDelay: "5s" }} />
         </div>
-        <h1 className="admin-logo">NAVO RADIO</h1>
-        <div className="admin-header-right">
+        <div className="admin-header-logo">
+          <div className="admin-logo-icon">
+            <Radio size={20} color="#fff" />
+          </div>
+          <div>
+            <h1 className="admin-logo-text">NAVO RADIO</h1>
+            <span className="admin-logo-sub">Admin Panel</span>
+          </div>
+        </div>
+
+        <div className="admin-date-wrap">
+          <Calendar size={16} className="admin-date-icon" />
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="date-picker"
+            className="admin-date-picker"
           />
         </div>
       </header>
 
-      <nav className="admin-dashboard">
-        <NavLink to="/admin" end className={({ isActive }) => `nav-tile nav-tile-broadcast ${isActive ? "active" : ""}`}>
-          <span className="nav-tile-label">СЕТКА<br />ЭФИРА</span>
-        </NavLink>
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.path}
-            to={`/admin/${item.path}`}
-            className={({ isActive }) => `nav-tile ${isActive ? "active" : ""}`}
-          >
-            <span className="nav-tile-label">{item.label}</span>
-            <span className="nav-tile-count">{(stats && stats[item.path]) ?? "—"}</span>
-          </NavLink>
-        ))}
+      <nav className="admin-nav-tabs">
+        {NAV_ITEMS.map((item) => {
+          const to = `/admin${item.path ? `/${item.path}` : ""}`;
+          const count = item.countKey ? (stats?.[item.countKey] ?? "—") : null;
+          const Icon = item.icon;
+
+          return (
+            <NavLink
+              key={item.path || "grid"}
+              to={to}
+              end={item.path === ""}
+              className={({ isActive }) =>
+                `admin-nav-tab ${isActive ? "active" : ""}`
+              }
+            >
+              <Icon size={16} />
+              <span>{item.label}</span>
+              {count !== null && (
+                <span className="admin-nav-tab-count">{count}</span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       <main className="admin-main">

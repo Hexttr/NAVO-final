@@ -2,7 +2,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #0f0f14;
+  background: var(--bg-base);
 }
 
 .admin-header {
@@ -10,19 +10,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2rem 2rem;
-  min-height: 5rem;
-  background: radial-gradient(ellipse at top, #1a1625 0%, #0f0f14 100%);
-  border-bottom: 1px solid #2d2d3a;
+  padding: 40px 32px;
+  min-height: 10rem;
+  border-bottom: 1px solid var(--border-default);
+  background: radial-gradient(ellipse at top, #1a1625 0%, var(--bg-base) 100%);
+  position: sticky;
+  top: 0;
+  z-index: 50;
   overflow: hidden;
 }
 
-.comets {
+.admin-comets {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
 }
+
 .comet {
   position: absolute;
   width: 8px;
@@ -33,6 +37,7 @@
   animation: comet-fly 12s linear infinite;
   top: 20%;
 }
+
 .comet::after {
   content: "";
   position: absolute;
@@ -45,115 +50,162 @@
   border-radius: 2px;
   filter: blur(1px);
 }
+
 @keyframes comet-fly {
-  0% {
-    left: -20px;
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  95% {
-    opacity: 1;
-  }
-  100% {
-    left: 100%;
-    opacity: 0;
-  }
+  0% { left: -20px; opacity: 0; }
+  5% { opacity: 1; }
+  95% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
 }
+
 .comet:nth-child(1) { top: 15%; animation-duration: 14s; }
 .comet:nth-child(2) { top: 35%; animation-duration: 11s; }
 .comet:nth-child(3) { top: 55%; animation-duration: 13s; }
 .comet:nth-child(4) { top: 25%; animation-duration: 15s; }
 .comet:nth-child(5) { top: 70%; animation-duration: 10s; }
 
-.admin-header .admin-logo,
-.admin-header .admin-header-right {
+.admin-header .admin-header-logo,
+.admin-header .admin-date-wrap {
   position: relative;
   z-index: 1;
 }
 
-.admin-logo {
-  font-size: 2.5rem;
+.admin-header-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-logo-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #805ad5 0%, #d53f8c 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(237, 100, 166, 0.5);
+}
+
+.admin-logo-text {
+  font-size: 20px;
   font-weight: 800;
+  letter-spacing: -0.02em;
   background: linear-gradient(135deg, #805ad5 0%, #d53f8c 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  line-height: 1.2;
   margin: 0;
 }
 
-.admin-header-right {
-  display: flex;
-  gap: 1rem;
+.admin-logo-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.date-picker {
-  width: auto;
-  min-width: 160px;
-}
-
-.admin-dashboard {
+.admin-date-wrap {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  padding: 1.5rem 2rem;
-  background: #0f0f14;
-  border-bottom: 1px solid #2d2d3a;
-}
-
-.nav-tile {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  padding: 1rem 1.5rem;
-  border-radius: 12px;
-  background: #1e1e28;
-  border: 1px solid #2d2d3a;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  transition: var(--transition-fast);
+}
+
+.admin-date-wrap:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.admin-date-icon {
+  display: none;
+}
+
+.admin-date-picker {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-primary) !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  outline: none;
+  width: auto !important;
   min-width: 140px;
-  transition: all 0.2s;
-}
-.nav-tile:hover {
-  border-color: #805ad5;
-  background: #252530;
-}
-.nav-tile.active {
-  border-color: #805ad5;
-  background: linear-gradient(135deg, rgba(128, 90, 213, 0.2) 0%, rgba(213, 63, 140, 0.1) 100%);
+  padding: 0 !important;
 }
 
-.nav-tile-broadcast {
-  background: linear-gradient(135deg, rgba(237, 100, 166, 0.15) 0%, rgba(246, 173, 198, 0.12) 100%);
-  border-color: rgba(237, 100, 166, 0.3);
-}
-.nav-tile-broadcast:hover {
-  background: linear-gradient(135deg, rgba(237, 100, 166, 0.22) 0%, rgba(246, 173, 198, 0.18) 100%);
-  border-color: rgba(237, 100, 166, 0.5);
-}
-.nav-tile-broadcast.active {
-  background: linear-gradient(135deg, rgba(237, 100, 166, 0.28) 0%, rgba(246, 173, 198, 0.22) 100%);
-  border-color: #ed64a6;
-}
-.nav-tile-broadcast .nav-tile-label {
-  font-size: 1.15rem;
-  font-weight: 800;
-  line-height: 1.25;
+.admin-date-picker::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(1);
+  opacity: 0.7;
 }
 
-.nav-tile-label {
+.admin-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 32px 20px;
+  overflow-x: auto;
+}
+
+.admin-nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 600;
-  font-size: 0.95rem;
+  text-decoration: none;
+  transition: var(--transition-fast);
+  white-space: nowrap;
 }
-.nav-tile-count {
-  font-size: 1.5rem;
+
+.admin-nav-tab:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.admin-nav-tab.active {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-subtle);
+  color: var(--brand-primary-hover);
+  box-shadow: var(--shadow-glow-red);
+}
+
+.admin-nav-tab-count {
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  font-size: 11px;
   font-weight: 700;
-  color: #b794f6;
-  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 0 6px;
+  color: var(--text-tertiary);
+}
+
+.admin-nav-tab.active .admin-nav-tab-count {
+  background: var(--brand-primary-muted);
+  color: var(--brand-primary-hover);
 }
 
 .admin-main {
   flex: 1;
-  padding: 2rem;
+  padding: 24px 32px;
   overflow-y: auto;
 }

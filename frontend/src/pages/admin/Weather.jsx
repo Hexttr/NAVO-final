@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
+import { Pencil, Play, Square, X } from "lucide-react";
 import {
   getWeather,
   createWeather,
@@ -290,7 +291,7 @@ export default function Weather() {
                       }}
                       title="Редактировать"
                     >
-                      ✎
+                      <Pencil size={14} />
                     </button>
                     {w.audio_path && (
                       <button
@@ -299,7 +300,7 @@ export default function Weather() {
                         onClick={() => handlePlay(w)}
                         title={playingId === w.id ? "Стоп" : "Воспроизвести"}
                       >
-                        {playingId === w.id ? "⏸" : "▶"}
+                        {playingId === w.id ? <Square size={14} /> : <Play size={14} />}
                       </button>
                     )}
                     <button
@@ -308,7 +309,7 @@ export default function Weather() {
                       onClick={() => handleDelete(w.id)}
                       title="Удалить"
                     >
-                      ✕
+                      <X size={14} />
                     </button>
                   </div>
                 </div>

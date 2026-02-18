@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Play, Square } from "lucide-react";
 import { getBroadcastPlaylistUrls } from "../api";
 import "./Player.css";
 
@@ -159,7 +160,7 @@ export default function Player() {
           disabled={loading}
           aria-label={playing ? "Stop" : "Play"}
         >
-          {loading ? "…" : playing ? "⏸" : "▶"}
+          {loading ? "…" : playing ? <Square size={40} /> : <Play size={40} />}
         </button>
       </div>
       <p className="player-hint">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Play, Square, X } from "lucide-react";
 import {
   getSongs,
   createSong,
@@ -279,7 +280,7 @@ export default function SongsDj() {
                     onClick={() => handlePlay(s)}
                     title={playingId === s.id ? "Стоп" : "Слушать"}
                   >
-                    {playingId === s.id ? "⏹" : "▶"}
+                    {playingId === s.id ? <Square size={14} /> : <Play size={14} />}
                   </button>
                 )}
               </td>
@@ -338,7 +339,7 @@ export default function SongsDj() {
                     title="Удалить"
                     aria-label="Удалить"
                   >
-                    ✕
+                    <X size={14} />
                   </button>
                 </div>
               </td>

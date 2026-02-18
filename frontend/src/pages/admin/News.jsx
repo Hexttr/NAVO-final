@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
+import { Pencil, Play, Square, X } from "lucide-react";
 import {
   getNews,
   createNews,
@@ -290,7 +291,7 @@ export default function News() {
                       }}
                       title="Редактировать"
                     >
-                      ✎
+                      <Pencil size={14} />
                     </button>
                     {n.audio_path && (
                       <button
@@ -299,7 +300,7 @@ export default function News() {
                         onClick={() => handlePlay(n)}
                         title={playingId === n.id ? "Стоп" : "Воспроизвести"}
                       >
-                        {playingId === n.id ? "⏸" : "▶"}
+                        {playingId === n.id ? <Square size={14} /> : <Play size={14} />}
                       </button>
                     )}
                     <button
@@ -308,7 +309,7 @@ export default function News() {
                       onClick={() => handleDelete(n.id)}
                       title="Удалить"
                     >
-                      ✕
+                      <X size={14} />
                     </button>
                   </div>
                 </div>
