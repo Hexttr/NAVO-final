@@ -77,6 +77,44 @@ def get_playlist_urls(
     return {"date": str(d), "items": result, "startIndex": start_index}
 
 
+@router.get("/debug-time")
+def debug_time(
+    d: date | None = Query(None, description="Date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Отладка: время сервера и текущий элемент. Сервер должен быть в Europe/Moscow."""
+    from datetime import datetime, timezone, timedelta
+
+    MOSCOW_TZ = timezone(timedelta(hours=3))
+    now = datetime.now(MOSCOW_TZ)
+    now_sec = now.hour * 3600 + now.minute * 60 + now.second
+    broadcast_date = d or now.date()
+    items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == broadcast_date,
+            BroadcastItem.entity_type != "empty",
+        )
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    current = None
+    for it in items:
+        parts = (it.start_time or "00:00:00").split(":")
+        start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
+        end_sec = start_sec + int(it.duration_seconds or 0)
+        if start_sec <= now_sec < end_sec:
+            current = {"entity_type": it.entity_type, "entity_id": it.entity_id, "start_time": it.start_time}
+            break
+    return {
+        "server_time": now.strftime("%H:%M:%S"),
+        "server_date": str(broadcast_date),
+        "now_sec": now_sec,
+        "current_item": current,
+        "items_count": len(items),
+    }
+
+
 @router.get("/now-playing")
 def get_now_playing(
     d: date = Query(..., description="Date YYYY-MM-DD"),

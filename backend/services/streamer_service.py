@@ -13,11 +13,12 @@ from sqlalchemy.orm import Session
 from config import settings
 from models import BroadcastItem, Song, News, Weather, Podcast, Intro
 
-# Москва UTC+3 (без перехода на летнее время с 2011)
+# Сервер должен быть в Europe/Moscow. Используем local time напрямую.
 MOSCOW_TZ = timezone(timedelta(hours=3))
 
 
 def _moscow_now() -> datetime:
+    """Текущее время по Москве. Сервер в Europe/Moscow — используем local time."""
     return datetime.now(MOSCOW_TZ)
 
 

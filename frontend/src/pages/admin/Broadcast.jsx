@@ -353,25 +353,31 @@ export default function Broadcast() {
 
   const getActiveIndex = () => {
     if (items.length === 0) return 0;
-    if (isToday && nowPlaying.entityType && nowPlaying.entityId != null) {
-      const idx = items.findIndex(
-        (i) => i.entity_type === nowPlaying.entityType && i.entity_id === nowPlaying.entityId
-      );
-      if (idx >= 0) return idx;
+    const nowSec = nowPlaying.currentTime
+      ? parseTimeToSeconds(nowPlaying.currentTime)
+      : (() => {
+          const d = new Date(Date.now() + 3 * 3600 * 1000);
+          return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+        })();
+    if (isToday && nowPlaying.entityType != null && nowPlaying.entityId != null) {
+      const candidates = items
+        .map((i, idx) => ({ i, idx }))
+        .filter(({ i }) => i.entity_type === nowPlaying.entityType && i.entity_id === nowPlaying.entityId);
+      for (const { i, idx } of candidates) {
+        const start = parseTimeToSeconds(i.start_time);
+        const end = start + (i.duration_seconds || 0);
+        if (nowSec >= start && nowSec < end) return idx;
+      }
+      if (candidates.length > 0) return candidates[0].idx;
     }
     if (isToday) {
-      const nowSec = nowPlaying.currentTime
-        ? parseTimeToSeconds(nowPlaying.currentTime)
-        : (() => {
-            const d = new Date(Date.now() + 3 * 3600 * 1000);
-            return (d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds());
-          })();
       for (let i = 0; i < items.length; i++) {
         const start = parseTimeToSeconds(items[i].start_time);
         const end = start + (items[i].duration_seconds || 0);
         if (nowSec >= start && nowSec < end) return i;
       }
       if (nowSec < parseTimeToSeconds(items[0]?.start_time)) return 0;
+      return items.length - 1;
     }
     return Math.max(0, items.length - 1);
   };
