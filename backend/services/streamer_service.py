@@ -331,23 +331,57 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
             first_round = False
 
 
+def _get_or_create_silence_1sec() -> Path | None:
+    """Создаёт 1-секундный MP3 тишины для concat. Кэшируется в temp."""
+    cache = Path(tempfile.gettempdir()) / "navo_silence_1s.mp3"
+    if cache.exists():
+        return cache
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                "-t", "1", "-q:a", "9", "-acodec", "libmp3lame",
+                str(cache),
+            ],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        return cache if cache.exists() else None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
 def _create_concat_file(playlist: list[tuple]) -> Path | None:
     """
-    Создаёт временный concat-файл для FFmpeg.
+    Создаёт concat-файл для FFmpeg. Включает path=None как тишину (duration).
     Повторяем плейлист 2 раза для бесшовного перехода в полночь.
     """
+    silence_path = _get_or_create_silence_1sec()
     lines = ["ffconcat version 1.0", ""]
-    for path, _, _, _ in playlist:
-        if path.exists():
+    has_any = False
+    for path, _, dur, _ in playlist:
+        if path is not None and path.exists():
             abs_path = str(path.resolve()).replace("'", "'\\''")
             lines.append(f"file '{abs_path}'")
-    if len(lines) <= 2:
+            has_any = True
+        elif silence_path and dur > 0:
+            abs_path = str(silence_path.resolve()).replace("'", "'\\''")
+            lines.append(f"file '{abs_path}'")
+            lines.append(f"duration {int(dur)}")
+            has_any = True
+    if not has_any or len(lines) <= 2:
         return None
     # Дублируем плейлист для зацикливания (2 суток)
-    for path, _, _, _ in playlist:
-        if path.exists():
+    for path, _, dur, _ in playlist:
+        if path is not None and path.exists():
             abs_path = str(path.resolve()).replace("'", "'\\''")
             lines.append(f"file '{abs_path}'")
+        elif silence_path and dur > 0:
+            abs_path = str(silence_path.resolve()).replace("'", "'\\''")
+            lines.append(f"file '{abs_path}'")
+            lines.append(f"duration {int(dur)}")
     fd, p = tempfile.mkstemp(suffix=".concat", prefix="navo_")
     with open(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -356,7 +390,7 @@ def _create_concat_file(playlist: list[tuple]) -> Path | None:
 
 async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: bool = True):
     """
-    Один FFmpeg с concat — бесшовные переходы, без пауз между треками.
+    Один FFmpeg с concat + реэнкод 128k — единый формат, без обрывов при смене треков.
     Критично для Icecast: пауза >1 сек вызывает отключение источника.
     """
     if not playlist:
@@ -366,18 +400,27 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
         now = _moscow_now()
         now_sec = now.hour * 3600 + now.minute * 60 + now.second
     start_idx, seek_sec = _find_current_position(playlist, now_sec)
-    # Seek в concat = сумма РЕАЛЬНЫХ длительностей файлов (БД может расходиться с файлами)
-    paths_to_probe = [playlist[i][0] for i in range(start_idx) if playlist[i][0].exists()]
+    # Seek = сумма длительностей ВСЕХ элементов до start_idx (path=None = из playlist)
+    total_seek = 0.0
     loop = asyncio.get_event_loop()
-    if paths_to_probe:
-        durations = await asyncio.gather(*[loop.run_in_executor(None, lambda p=p: _get_file_duration_sec(p)) for p in paths_to_probe])
-        total_seek = sum(durations)
-    else:
-        total_seek = 0.0
-    if start_idx < len(playlist) and playlist[start_idx][0].exists():
-        total_seek += seek_sec
+    for i in range(start_idx):
+        path, _, dur = playlist[i][0], playlist[i][1], playlist[i][2]
+        if path is not None and path.exists():
+            d = await loop.run_in_executor(None, _get_file_duration_sec, path)
+            total_seek += d if d > 0 else float(dur or 0)
+        else:
+            total_seek += float(dur or 0)
+    if start_idx < len(playlist):
+        item_path = playlist[start_idx][0]
+        if item_path is not None and item_path.exists():
+            total_seek += seek_sec
+        else:
+            total_seek += min(seek_sec, float(playlist[start_idx][2] or 0))
     concat_path = _create_concat_file(playlist)
     if not concat_path or not concat_path.exists():
+        # Fallback: concat не создан (нет ffmpeg/silence) — сырой стрим
+        async for chunk in stream_broadcast_async(playlist, sync_to_moscow):
+            yield chunk
         return
     chunk_size = 32 * 1024
     try:
