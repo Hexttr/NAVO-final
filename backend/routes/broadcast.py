@@ -31,7 +31,8 @@ def get_playlist_urls(
     """Плейлист для последовательного воспроизведения на фронте. Возвращает {items, startIndex}."""
     from datetime import datetime, timezone, timedelta
 
-    base = settings.base_url.rstrip("/") + "/api"
+    # Относительные URL — браузер использует тот же протокол, что и страница (HTTPS)
+    base = "/api"
 
     items = (
         db.query(BroadcastItem)

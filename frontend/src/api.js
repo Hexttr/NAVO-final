@@ -1,7 +1,5 @@
 const API =
-  import.meta.env.DEV
-    ? "http://localhost:8000/api"
-    : (typeof window !== "undefined" ? window.location.origin : "") + "/api";
+  import.meta.env.DEV ? "http://localhost:8000/api" : "/api";
 
 export async function getStats() {
   const r = await fetch(`${API}/admin/stats`);
