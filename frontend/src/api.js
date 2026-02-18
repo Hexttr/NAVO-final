@@ -1,9 +1,7 @@
 const API =
-  import.meta.env.VITE_API_URL
-    ? import.meta.env.VITE_API_URL.replace(/\/$/, "") + "/api"
-    : import.meta.env.DEV
-      ? "http://localhost:8000/api"
-      : "/api";
+  import.meta.env.DEV
+    ? "http://localhost:8000/api"
+    : (typeof window !== "undefined" ? window.location.origin : "") + "/api";
 
 export async function getStats() {
   const r = await fetch(`${API}/admin/stats`);
