@@ -3,6 +3,7 @@ Stream broadcast playlist as continuous MP3.
 Синхронизация по московскому времени: воспроизведение с текущего момента эфира.
 """
 import asyncio
+import subprocess
 import tempfile
 from datetime import date, datetime, timezone, timedelta
 
@@ -11,6 +12,22 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from config import settings
+
+
+def _get_file_duration_sec(path: Path) -> float:
+    """Реальная длительность файла через ffprobe. Fallback — из playlist."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        if r.returncode == 0 and r.stdout:
+            return float(r.stdout.decode().strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
+        pass
+    return 0.0
 from models import BroadcastItem, Song, News, Weather, Podcast, Intro
 
 # Сервер должен быть в Europe/Moscow. Используем local time напрямую.
@@ -275,11 +292,14 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
         now = _moscow_now()
         now_sec = now.hour * 3600 + now.minute * 60 + now.second
     start_idx, seek_sec = _find_current_position(playlist, now_sec)
-    # Seek в concat = сумма длительностей существующих файлов до start_idx + seek_sec
-    total_seek = 0
-    for i in range(start_idx):
-        if playlist[i][0].exists():
-            total_seek += int(playlist[i][2])
+    # Seek в concat = сумма РЕАЛЬНЫХ длительностей файлов (БД может расходиться с файлами)
+    paths_to_probe = [playlist[i][0] for i in range(start_idx) if playlist[i][0].exists()]
+    loop = asyncio.get_event_loop()
+    if paths_to_probe:
+        durations = await asyncio.gather(*[loop.run_in_executor(None, lambda p=p: _get_file_duration_sec(p)) for p in paths_to_probe])
+        total_seek = sum(durations)
+    else:
+        total_seek = 0.0
     if start_idx < len(playlist) and playlist[start_idx][0].exists():
         total_seek += seek_sec
     concat_path = _create_concat_file(playlist)
