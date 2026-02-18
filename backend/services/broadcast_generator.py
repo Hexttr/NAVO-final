@@ -96,18 +96,32 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         t_sec = h * 3600 + m * 60
         if et == "news" and news_list:
             n = next(news_it)
-            timed_events.append((t_sec, "news", n.id, 120, "Новости"))
+            dur = int(get_entity_duration_from_file(db, "news", n.id))
+            if dur <= 0:
+                dur = int(n.duration_seconds or 120)
+            if dur > 0 and (not n.duration_seconds or abs(n.duration_seconds - dur) > 1):
+                n.duration_seconds = round(dur, 1)
+                db.commit()
+            dur = dur if dur > 0 else 120
+            timed_events.append((t_sec, "news", n.id, dur, "Новости"))
         elif et == "weather" and weather_list:
             w = next(weather_it)
-            timed_events.append((t_sec, "weather", w.id, 90, "Погода"))
+            dur = int(get_entity_duration_from_file(db, "weather", w.id))
+            if dur <= 0:
+                dur = int(w.duration_seconds or 90)
+            if dur > 0 and (not w.duration_seconds or abs(w.duration_seconds - dur) > 1):
+                w.duration_seconds = round(dur, 1)
+                db.commit()
+            dur = dur if dur > 0 else 90
+            timed_events.append((t_sec, "weather", w.id, dur, "Погода"))
         elif et == "podcast" and podcasts:
             p = next(podcast_it)
-            dur = int(p.duration_seconds or 0)
+            dur = int(get_entity_duration_from_file(db, "podcast", p.id))
             if dur <= 0:
-                dur = int(get_entity_duration_from_file(db, "podcast", p.id))
-                if dur > 0:
-                    p.duration_seconds = round(dur, 1)
-                    db.commit()
+                dur = int(p.duration_seconds or 1800)
+            if dur > 0 and (not p.duration_seconds or abs(p.duration_seconds - dur) > 1):
+                p.duration_seconds = round(dur, 1)
+                db.commit()
             dur = dur if dur > 0 else 1800
             timed_events.append((t_sec, "podcast", p.id, dur, p.title))
 
@@ -115,12 +129,12 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         t_sec = h * 3600 + INTRO_MINUTE * 60
         if intros:
             i = next(intro_it)
-            dur = int(i.duration_seconds or 0)
+            dur = int(get_entity_duration_from_file(db, "intro", i.id))
             if dur <= 0:
-                dur = int(get_entity_duration_from_file(db, "intro", i.id))
-                if dur > 0:
-                    i.duration_seconds = round(dur, 1)
-                    db.commit()
+                dur = int(i.duration_seconds or 30)
+            if dur > 0 and (not i.duration_seconds or abs(i.duration_seconds - dur) > 1):
+                i.duration_seconds = round(dur, 1)
+                db.commit()
             dur = dur if dur > 0 else 30
             timed_events.append((t_sec, "intro", i.id, dur, i.title))
 
@@ -144,12 +158,12 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         for _ in range(len(songs)):
             s = next_song()
             dj = 45 if s.dj_audio_path else 0
-            dur = int(s.duration_seconds or 0)
+            dur = int(get_entity_duration_from_file(db, "song", s.id))
             if dur <= 0:
-                dur = int(get_entity_duration_from_file(db, "song", s.id))
-                if dur > 0:
-                    s.duration_seconds = round(dur, 1)
-                    db.commit()
+                dur = int(s.duration_seconds or 180)
+            if dur > 0 and (not s.duration_seconds or abs(s.duration_seconds - dur) > 1):
+                s.duration_seconds = round(dur, 1)
+                db.commit()
             dur = dur if dur > 0 else 180
             total = dj + dur
             if total <= remaining_sec:
