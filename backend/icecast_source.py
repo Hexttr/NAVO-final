@@ -16,7 +16,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 from database import SessionLocal
 from services.streamer_service import (
     get_playlist_with_times,
-    stream_broadcast_ffmpeg_concat,
+    stream_broadcast_async,
     moscow_date,
     _find_current_position,
     get_broadcast_schedule_hash,
@@ -77,7 +77,7 @@ def main():
             )
 
             async def stream_chunks():
-                async for chunk in stream_broadcast_ffmpeg_concat(playlist, sync_to_moscow=True):
+                async for chunk in stream_broadcast_async(playlist, sync_to_moscow=True):
                     if shutdown:
                         return
                     proc.stdin.write(chunk)
