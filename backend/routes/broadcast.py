@@ -273,8 +273,8 @@ def recalc_all_durations(db: Session = Depends(get_db)):
 
 @router.post("/generate")
 def generate(
+    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
-    background_tasks: BackgroundTasks = Depends(),
     db: Session = Depends(get_db),
 ):
     try:
@@ -418,8 +418,8 @@ def hls_url(
 
 @router.post("/generate-hls")
 def trigger_generate_hls(
+    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
-    background_tasks: BackgroundTasks = Depends(),
     db: Session = Depends(get_db),
 ):
     """Запустить генерацию HLS в фоне. 2-5 мин для суток эфира."""
