@@ -229,6 +229,20 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
             first_round = False
 
 
+async def stream_broadcast_async(playlist: list[tuple], sync_to_moscow: bool = True):
+    """
+    Async wrapper для stream_broadcast. Мгновенные переходы между файлами — без пауз,
+    в отличие от stream_broadcast_ffmpeg (где каждый файл = новый FFmpeg = задержка).
+    Для Icecast критично: пауза >1 сек может вызвать отключение источника.
+    """
+    n = 0
+    for chunk in stream_broadcast(playlist, sync_to_moscow):
+        yield chunk
+        n += 1
+        if n % 8 == 0:
+            await asyncio.sleep(0)
+
+
 async def stream_broadcast_ffmpeg(playlist: list[tuple], sync_to_moscow: bool = True):
     """
     Async generator: streams MP3 через FFmpeg subprocess.
