@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Podcast
 from config import settings
+from services.streamer_service import get_entity_duration_from_file
 
 router = APIRouter(prefix="/podcasts", tags=["podcasts"])
 
@@ -42,7 +43,25 @@ async def create_podcast(title: str = Form(...), file: UploadFile = UploadFile(.
     db.add(p)
     db.commit()
     db.refresh(p)
+    dur = get_entity_duration_from_file(db, "podcast", p.id)
+    if dur > 0:
+        p.duration_seconds = round(dur, 1)
+        db.commit()
+        db.refresh(p)
     return p
+
+
+@router.post("/recalc-durations")
+def recalc_podcast_durations(db: Session = Depends(get_db)):
+    """Пересчитать длительность всех подкастов из файлов (ffprobe). Для уже загруженных без duration."""
+    updated = 0
+    for p in db.query(Podcast).filter(Podcast.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "podcast", p.id)
+        if dur > 0 and (not p.duration_seconds or abs(p.duration_seconds - dur) > 1):
+            p.duration_seconds = round(dur, 1)
+            updated += 1
+    db.commit()
+    return {"updated": updated, "message": f"Обновлено {updated} подкастов"}
 
 
 @router.delete("/{podcast_id}")

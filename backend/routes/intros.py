@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Intro
 from config import settings
+from services.streamer_service import get_entity_duration_from_file
 
 router = APIRouter(prefix="/intros", tags=["intros"])
 
@@ -42,7 +43,25 @@ async def create_intro(title: str = Form(...), file: UploadFile = UploadFile(...
     db.add(i)
     db.commit()
     db.refresh(i)
+    dur = get_entity_duration_from_file(db, "intro", i.id)
+    if dur > 0:
+        i.duration_seconds = round(dur, 1)
+        db.commit()
+        db.refresh(i)
     return i
+
+
+@router.post("/recalc-durations")
+def recalc_intro_durations(db: Session = Depends(get_db)):
+    """Пересчитать длительность всех интро из файлов (ffprobe)."""
+    updated = 0
+    for i in db.query(Intro).filter(Intro.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "intro", i.id)
+        if dur > 0 and (not i.duration_seconds or abs(i.duration_seconds - dur) > 1):
+            i.duration_seconds = round(dur, 1)
+            updated += 1
+    db.commit()
+    return {"updated": updated, "message": f"Обновлено {updated} интро"}
 
 
 @router.delete("/{intro_id}")

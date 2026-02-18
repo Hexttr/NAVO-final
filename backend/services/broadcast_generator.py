@@ -12,6 +12,7 @@ import random
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from models import Song, News, Weather, Podcast, Intro, BroadcastItem
+from services.streamer_service import get_entity_duration_from_file
 
 
 FIXED_SLOTS = [
@@ -101,14 +102,26 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
             timed_events.append((t_sec, "weather", w.id, 90, "Погода"))
         elif et == "podcast" and podcasts:
             p = next(podcast_it)
-            dur = int(p.duration_seconds or 1800)
+            dur = int(p.duration_seconds or 0)
+            if dur <= 0:
+                dur = int(get_entity_duration_from_file(db, "podcast", p.id))
+                if dur > 0:
+                    p.duration_seconds = round(dur, 1)
+                    db.commit()
+            dur = dur if dur > 0 else 1800
             timed_events.append((t_sec, "podcast", p.id, dur, p.title))
 
     for h in range(24):
         t_sec = h * 3600 + INTRO_MINUTE * 60
         if intros:
             i = next(intro_it)
-            dur = int(i.duration_seconds or 30)
+            dur = int(i.duration_seconds or 0)
+            if dur <= 0:
+                dur = int(get_entity_duration_from_file(db, "intro", i.id))
+                if dur > 0:
+                    i.duration_seconds = round(dur, 1)
+                    db.commit()
+            dur = dur if dur > 0 else 30
             timed_events.append((t_sec, "intro", i.id, dur, i.title))
 
     timed_events.sort(key=lambda x: x[0])
@@ -131,7 +144,13 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         for _ in range(len(songs)):
             s = next_song()
             dj = 45 if s.dj_audio_path else 0
-            dur = int(s.duration_seconds or 180)
+            dur = int(s.duration_seconds or 0)
+            if dur <= 0:
+                dur = int(get_entity_duration_from_file(db, "song", s.id))
+                if dur > 0:
+                    s.duration_seconds = round(dur, 1)
+                    db.commit()
+            dur = dur if dur > 0 else 180
             total = dj + dur
             if total <= remaining_sec:
                 if s.dj_audio_path:

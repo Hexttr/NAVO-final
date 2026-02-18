@@ -14,6 +14,31 @@ from sqlalchemy.orm import Session
 from config import settings
 
 
+def _generate_silence_mp3(duration_sec: float):
+    """Генерирует MP3-тишину через ffmpeg. Yields chunks."""
+    if duration_sec <= 0:
+        return
+    try:
+        proc = subprocess.Popen(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo",
+                "-t", str(int(duration_sec) + 1),
+                "-q:a", "9", "-acodec", "libmp3lame", "-f", "mp3", "-",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        while True:
+            chunk = proc.stdout.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            yield chunk
+        proc.wait()
+    except (FileNotFoundError, OSError):
+        pass
+
+
 def _get_file_duration_sec(path: Path) -> float:
     """Реальная длительность файла через ffprobe. Fallback — из playlist."""
     try:
@@ -28,6 +53,8 @@ def _get_file_duration_sec(path: Path) -> float:
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         pass
     return 0.0
+
+
 from models import BroadcastItem, Song, News, Weather, Podcast, Intro
 
 # Сервер должен быть в Europe/Moscow. Используем local time напрямую.
@@ -97,6 +124,12 @@ def _resolve_path(p: Path, entity_type: str = "", entity_id: int = 0) -> Path | 
     if entity_type == "dj" and entity_id:
         for root in (PROJECT_ROOT / settings.upload_dir, Path.cwd() / settings.upload_dir):
             candidates.append(root / "dj" / f"dj_{entity_id}.mp3")
+    if entity_type == "podcast":
+        for root in (PROJECT_ROOT / settings.upload_dir, Path.cwd() / settings.upload_dir):
+            candidates.append(root / "podcasts" / p.name)
+    if entity_type == "intro":
+        for root in (PROJECT_ROOT / settings.upload_dir, Path.cwd() / settings.upload_dir):
+            candidates.append(root / "intros" / p.name)
     for alt in candidates:
         try:
             if alt and alt.exists():
@@ -144,13 +177,40 @@ def _get_audio_path(db: Session, entity_type: str, entity_id: int) -> Path | Non
     return _resolve_path(p, entity_type, entity_id)
 
 
+def get_entity_duration_from_file(db: Session, entity_type: str, entity_id: int) -> float:
+    """
+    Реальная длительность аудиофайла через ffprobe.
+    Возвращает 0.0 если файл не найден или ffprobe недоступен.
+    """
+    path = _get_audio_path(db, entity_type, entity_id)
+    if not path:
+        return 0.0
+    return _get_file_duration_sec(path)
+
+
 CHUNK_SIZE = 32 * 1024  # 32 KB
 
 
-def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Path, int, float, str]]:
+def get_broadcast_schedule_hash(db: Session, broadcast_date: date) -> str:
+    """Хеш эфирной сетки для обнаружения изменений. При смене расписания — перезагрузка стрима."""
+    items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == broadcast_date,
+            BroadcastItem.entity_type != "empty",
+        )
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    parts = [f"{i.sort_order}:{i.entity_type}:{i.entity_id}:{i.start_time}:{i.duration_seconds}" for i in items]
+    return str(hash(tuple(parts)))
+
+
+def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Path | None, int, float, str]]:
     """
-    Get playlist: list of (path, start_sec, duration_sec, entity_type).
-    start_sec = seconds since midnight (Moscow).
+    Get playlist: list of (path|None, start_sec, duration_sec, entity_type).
+    Включает ВСЕ элементы эфира в том же порядке, что и админка — для синхронизации подсветки.
+    path=None — файл не найден, будет тишина.
     """
     items = (
         db.query(BroadcastItem)
@@ -164,10 +224,9 @@ def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Pat
     result = []
     for item in items:
         p = _get_audio_path(db, item.entity_type, item.entity_id)
-        if p:
-            start_sec = _parse_time(item.start_time)
-            dur = float(item.duration_seconds or 0)
-            result.append((p, start_sec, dur, item.entity_type))
+        start_sec = _parse_time(item.start_time)
+        dur = float(item.duration_seconds or 0)
+        result.append((p, start_sec, dur, item.entity_type))
     return result
 
 
@@ -210,6 +269,18 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
             item = playlist[idx]
             path = item[0]
             duration_sec = item[2]
+            # Файл отсутствует — генерируем тишину (сохраняем синхронизацию с расписанием)
+            if path is None:
+                silence_dur = duration_sec
+                if first_round and idx == start_idx and seek_sec > 0:
+                    silence_dur = max(0, duration_sec - seek_sec)
+                for chunk in _generate_silence_mp3(silence_dur):
+                    yield chunk
+                idx += 1
+                if idx >= len(playlist):
+                    idx = 0
+                    first_round = False
+                continue
             if not path.exists():
                 idx += 1
                 if idx >= len(playlist):
@@ -217,11 +288,14 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
                     first_round = False
                 continue
             skip_bytes = 0
-            if first_round and idx == start_idx and seek_sec > 0 and duration_sec > 0:
+            if first_round and idx == start_idx and seek_sec > 0:
                 try:
                     size = path.stat().st_size
-                    skip_bytes = int((seek_sec / duration_sec) * size)
-                    skip_bytes = min(skip_bytes, max(0, size - CHUNK_SIZE))
+                    actual_dur = _get_file_duration_sec(path)
+                    dur = actual_dur if actual_dur > 0 else duration_sec
+                    if dur > 0:
+                        skip_bytes = int((seek_sec / dur) * size)
+                        skip_bytes = min(skip_bytes, max(0, size - CHUNK_SIZE))
                 except OSError:
                     pass
             try:

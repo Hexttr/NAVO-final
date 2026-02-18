@@ -282,6 +282,15 @@ export async function generateBroadcast(date) {
   return r.json();
 }
 
+export async function recalcBroadcastDurations() {
+  const r = await fetch(`${API}/broadcast/recalc-durations`, { method: "POST" });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || "Ошибка");
+  }
+  return r.json();
+}
+
 export async function deleteBroadcastItem(itemId, date) {
   const r = await fetch(`${API}/broadcast/items/${itemId}?d=${date}`, { method: "DELETE" });
   if (!r.ok) {

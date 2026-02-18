@@ -7,6 +7,7 @@ from database import get_db
 from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
+from services.streamer_service import get_entity_duration_from_file
 from config import settings
 
 router = APIRouter(prefix="/broadcast", tags=["broadcast"])
@@ -212,6 +213,31 @@ def delete_broadcast(
     deleted = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).delete()
     db.commit()
     return {"date": str(d), "deleted": deleted, "message": "Эфир удалён"}
+
+
+@router.post("/recalc-durations")
+def recalc_all_durations(db: Session = Depends(get_db)):
+    """Пересчитать длительность всех аудио из файлов (ffprobe). Для точной эфирной сетки."""
+    from models import Song, Podcast, Intro
+    updated = {"songs": 0, "podcasts": 0, "intros": 0}
+    for s in db.query(Song).filter(Song.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "song", s.id)
+        if dur > 0 and (not s.duration_seconds or abs(s.duration_seconds - dur) > 1):
+            s.duration_seconds = round(dur, 1)
+            updated["songs"] += 1
+    for p in db.query(Podcast).filter(Podcast.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "podcast", p.id)
+        if dur > 0 and (not p.duration_seconds or abs(p.duration_seconds - dur) > 1):
+            p.duration_seconds = round(dur, 1)
+            updated["podcasts"] += 1
+    for i in db.query(Intro).filter(Intro.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "intro", i.id)
+        if dur > 0 and (not i.duration_seconds or abs(i.duration_seconds - dur) > 1):
+            i.duration_seconds = round(dur, 1)
+            updated["intros"] += 1
+    db.commit()
+    total = sum(updated.values())
+    return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро"}
 
 
 @router.post("/generate")

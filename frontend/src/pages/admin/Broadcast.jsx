@@ -7,6 +7,7 @@ import {
   getBroadcastNowPlaying,
   generateBroadcast,
   deleteBroadcast,
+  recalcBroadcastDurations,
   deleteBroadcastItem,
   insertBroadcastItem,
   moveBroadcastItem,
@@ -61,6 +62,7 @@ export default function Broadcast() {
   const [revoicingId, setRevoicingId] = useState(null);
   const [regeneratingId, setRegeneratingId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [recalcDurations, setRecalcDurations] = useState(false);
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
@@ -443,6 +445,26 @@ export default function Broadcast() {
           >
             <Trash2 size={16} />
             {deleting ? "…" : "Удалить эфир"}
+          </button>
+          <button
+            className="broadcast-btn broadcast-btn-secondary"
+            onClick={async () => {
+              setRecalcDurations(true);
+              try {
+                const r = await recalcBroadcastDurations();
+                alert(r.message || `Обновлено: ${r.updated?.podcasts ?? 0} подкастов`);
+                load();
+              } catch (e) {
+                alert(e.message || "Ошибка");
+              } finally {
+                setRecalcDurations(false);
+              }
+            }}
+            disabled={recalcDurations}
+            title="Пересчитать длительность MP3 из файлов (ffprobe). Для точной сетки."
+          >
+            {recalcDurations ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
+            {recalcDurations ? "…" : "Точные длительности"}
           </button>
         </div>
         <div className="broadcast-actions-count">

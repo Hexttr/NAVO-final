@@ -5,6 +5,7 @@ Fillers (song, dj, empty) get start_time from previous end_time.
 """
 from sqlalchemy.orm import Session
 from models import BroadcastItem, Song, News, Weather, Podcast, Intro
+from services.streamer_service import get_entity_duration_from_file
 
 
 ANCHOR_TYPES = {"news", "weather", "podcast", "intro"}
@@ -46,12 +47,15 @@ def recalc_times(db: Session, broadcast_date, items: list[BroadcastItem]) -> Non
 
 
 def get_entity_duration(db: Session, entity_type: str, entity_id: int) -> float:
-    """Get duration in seconds for entity. Raises ValueError if not found."""
+    """Get duration in seconds for entity. При duration_seconds=0 — реальная длительность из файла (ffprobe)."""
     if entity_type == "song":
         s = db.query(Song).filter(Song.id == entity_id, Song.file_path != "").first()
         if not s:
             raise ValueError("Song not found")
-        return float(s.duration_seconds or 180)
+        dur = float(s.duration_seconds or 0)
+        if dur <= 0:
+            dur = get_entity_duration_from_file(db, "song", entity_id)
+        return dur if dur > 0 else 180.0
     if entity_type == "dj":
         s = db.query(Song).filter(Song.id == entity_id, Song.dj_audio_path != "").first()
         if not s:
@@ -61,22 +65,40 @@ def get_entity_duration(db: Session, entity_type: str, entity_id: int) -> float:
         n = db.query(News).filter(News.id == entity_id, News.audio_path != "").first()
         if not n:
             raise ValueError("News with audio not found")
-        return 120.0
+        dur = float(n.duration_seconds or 0)
+        if dur <= 0:
+            dur = get_entity_duration_from_file(db, "news", entity_id)
+        return dur if dur > 0 else 120.0
     if entity_type == "weather":
         w = db.query(Weather).filter(Weather.id == entity_id, Weather.audio_path != "").first()
         if not w:
             raise ValueError("Weather with audio not found")
-        return 90.0
+        dur = float(w.duration_seconds or 0)
+        if dur <= 0:
+            dur = get_entity_duration_from_file(db, "weather", entity_id)
+        return dur if dur > 0 else 90.0
     if entity_type == "podcast":
         p = db.query(Podcast).get(entity_id)
         if not p:
             raise ValueError("Podcast not found")
-        return float(p.duration_seconds or 1800)
+        dur = float(p.duration_seconds or 0)
+        if dur <= 0:
+            dur = get_entity_duration_from_file(db, "podcast", entity_id)
+            if dur > 0:
+                p.duration_seconds = round(dur, 1)
+                db.commit()
+        return dur if dur > 0 else 1800.0
     if entity_type == "intro":
         i = db.query(Intro).get(entity_id)
         if not i:
             raise ValueError("Intro not found")
-        return float(i.duration_seconds or 30)
+        dur = float(i.duration_seconds or 0)
+        if dur <= 0:
+            dur = get_entity_duration_from_file(db, "intro", entity_id)
+            if dur > 0:
+                i.duration_seconds = round(dur, 1)
+                db.commit()
+        return dur if dur > 0 else 30.0
     raise ValueError(f"Unknown entity type: {entity_type}")
 
 
