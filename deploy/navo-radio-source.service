@@ -1,0 +1,21 @@
+[Unit]
+Description=NAVO RADIO Icecast Source (feeds broadcast to Icecast)
+After=network.target icecast-navoradio.service
+Requires=icecast-navoradio.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/navo-radio/backend
+EnvironmentFile=/opt/navo-radio/.env
+Environment="PATH=/opt/navo-radio/venv/bin:/usr/bin:/bin"
+Environment="ICECAST_HOST=127.0.0.1"
+Environment="ICECAST_PORT=8001"
+Environment="ICECAST_MOUNT=live"
+Environment="ICECAST_SOURCE_PASSWORD=navo-icecast-source-2024"
+ExecStart=/opt/navo-radio/venv/bin/python icecast_source.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

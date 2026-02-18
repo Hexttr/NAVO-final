@@ -1,0 +1,13 @@
+[Unit]
+Description=Icecast for NAVO RADIO (port 8001)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/icecast2 -c /opt/navo-radio/deploy/icecast.xml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,16 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
-import { getBroadcastPlaylistUrls } from "../api";
 import "./Player.css";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const STREAM_URL = "/stream";
 const EQ_BARS = 24;
 const BAR_COUNT = EQ_BARS;
 
 export default function Player() {
   const [playing, setPlaying] = useState(false);
-  const [items, setItems] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [barHeights, setBarHeights] = useState(() => Array(BAR_COUNT).fill(15));
@@ -22,43 +19,21 @@ export default function Player() {
   const dataArrayRef = useRef(null);
   const rafRef = useRef(null);
 
-  const togglePlay = async () => {
+  const togglePlay = () => {
     setError(null);
     if (playing) {
       audioRef.current?.pause();
       setPlaying(false);
       return;
     }
-    if (items.length === 0) {
-      setLoading(true);
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        const { items: fetched, startIndex } = await getBroadcastPlaylistUrls(today, true);
-        if (!fetched?.length) {
-          setError("Нет эфира на сегодня. Сгенерируйте эфир в админке.");
-          setLoading(false);
-          return;
-        }
-        setItems(fetched);
-        setCurrentIndex(startIndex);
-        const item = fetched[startIndex];
-        const fullUrl = item?.url?.startsWith("http") ? item.url : `${API_BASE}${item?.url || ""}`;
-        audioRef.current.src = fullUrl;
-        audioRef.current.play().catch((e) => setError("Не удалось воспроизвести"));
-        setPlaying(true);
-      } catch (e) {
-        setError(e.message || "Не удалось загрузить плейлист");
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-    const item = items[currentIndex];
-    if (!item?.url) return;
-    const fullUrl = item.url.startsWith("http") ? item.url : `${API_BASE}${item.url}`;
-    audioRef.current.src = fullUrl;
-    audioRef.current.play().catch((e) => setError("Не удалось воспроизвести"));
+    setLoading(true);
+    audioRef.current.src = STREAM_URL;
+    audioRef.current.play().catch((e) => {
+      setError("Не удалось воспроизвести. Проверьте эфир в админке.");
+      setLoading(false);
+    });
     setPlaying(true);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -134,19 +109,6 @@ export default function Player() {
     };
   }, [playing]);
 
-  const handleEnded = () => {
-    if (items.length <= 1) {
-      setPlaying(false);
-      return;
-    }
-    const nextIndex = currentIndex + 1 >= items.length ? 0 : currentIndex + 1;
-    setCurrentIndex(nextIndex);
-    const item = items[nextIndex];
-    const fullUrl = item?.url?.startsWith("http") ? item.url : `${API_BASE}${item?.url || ""}`;
-    audioRef.current.src = fullUrl;
-    audioRef.current.play().catch((e) => setError("Не удалось воспроизвести"));
-  };
-
   return (
     <div className="player-page">
       <div className="player-header">
@@ -180,7 +142,6 @@ export default function Player() {
       )}
       <audio
         ref={audioRef}
-        onEnded={handleEnded}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onError={() => setError("Ошибка загрузки. Проверьте эфир в админке.")}

@@ -1,5 +1,15 @@
 # Деплой NAVO RADIO на navoradio.com
 
+## Icecast (единый эфир для всех)
+
+Эфир идёт через Icecast — один источник, все слушатели слышат одно и то же.
+
+```bash
+python deploy/deploy_icecast.py
+```
+
+Устанавливает: Icecast2, navo-radio-source (стримит эфир в Icecast), обновляет nginx.
+
 ## Подготовка
 
 ### 1. Ветка ubuntu
