@@ -152,7 +152,8 @@ def _find_current_position(playlist: list[tuple], now_sec: int) -> tuple[int, in
     Find (playlist_index, seek_sec) for current Moscow time.
     seek_sec = seconds to skip within the current file (0 if at start).
     """
-    for i, (_, start_sec, dur) in enumerate(playlist):
+    for i, item in enumerate(playlist):
+        start_sec, dur = item[1], item[2]
         end_sec = start_sec + int(dur)
         if start_sec <= now_sec < end_sec:
             seek_sec = now_sec - start_sec
