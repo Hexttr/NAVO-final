@@ -1,15 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
+import { getBroadcastNowPlaying, moscowDateStr } from "../api";
 import "./Player.css";
 
 const STREAM_URL = "/stream";
 const EQ_BARS = 24;
 const BAR_COUNT = EQ_BARS;
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 2000;
 
 export default function Player() {
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [nowPlayingTitle, setNowPlayingTitle] = useState(null);
   const [barHeights, setBarHeights] = useState(() => Array(BAR_COUNT).fill(15));
   const [useAnalyser, setUseAnalyser] = useState(false);
   const audioRef = useRef(null);
@@ -18,23 +22,55 @@ export default function Player() {
   const sourceRef = useRef(null);
   const dataArrayRef = useRef(null);
   const rafRef = useRef(null);
+  const retryCountRef = useRef(0);
+
+  const playStream = () => {
+    if (!audioRef.current) return;
+    audioRef.current.src = STREAM_URL + "?t=" + Date.now();
+    audioRef.current.play().catch((e) => {
+      setError("Не удалось воспроизвести. Проверьте эфир в админке.");
+      setLoading(false);
+    });
+  };
 
   const togglePlay = () => {
     setError(null);
+    retryCountRef.current = 0;
     if (playing) {
       audioRef.current?.pause();
       setPlaying(false);
       return;
     }
     setLoading(true);
-    audioRef.current.src = STREAM_URL;
-    audioRef.current.play().catch((e) => {
-      setError("Не удалось воспроизвести. Проверьте эфир в админке.");
-      setLoading(false);
-    });
+    playStream();
     setPlaying(true);
     setLoading(false);
   };
+
+  const handleAudioError = () => {
+    if (retryCountRef.current < MAX_RETRIES) {
+      retryCountRef.current += 1;
+      setError(`Переподключение (${retryCountRef.current}/${MAX_RETRIES})…`);
+      setTimeout(() => {
+        setError(null);
+        playStream();
+      }, RETRY_DELAY_MS);
+    } else {
+      setError("Ошибка загрузки. Проверьте эфир в админке.");
+      retryCountRef.current = 0;
+    }
+  };
+
+  useEffect(() => {
+    const poll = () => {
+      getBroadcastNowPlaying(moscowDateStr())
+        .then((r) => setNowPlayingTitle(r?.title || null))
+        .catch(() => setNowPlayingTitle(null));
+    };
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -129,6 +165,9 @@ export default function Player() {
         {playing ? "Слушайте эфир" : "Нажмите Play для прослушивания"}
       </p>
       {error && <p className="player-error">{error}</p>}
+      {nowPlayingTitle && (
+        <p className="player-now-playing">Сейчас играет: {nowPlayingTitle}</p>
+      )}
       {playing && (
         <div className={`equalizer ${!useAnalyser ? "equalizer-fallback" : ""}`} aria-hidden>
           {barHeights.map((h, i) => (
@@ -142,9 +181,12 @@ export default function Player() {
       )}
       <audio
         ref={audioRef}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          retryCountRef.current = 0;
+        }}
         onPause={() => setPlaying(false)}
-        onError={() => setError("Ошибка загрузки. Проверьте эфир в админке.")}
+        onError={handleAudioError}
       />
     </div>
   );

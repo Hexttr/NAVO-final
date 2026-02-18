@@ -121,9 +121,10 @@ def get_now_playing(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """Текущий трек по расписанию (Москва UTC+3). Для подсветки в сетке эфира."""
+    """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет»."""
     from datetime import datetime, timezone, timedelta
     from fastapi.responses import JSONResponse
+    import json
 
     MOSCOW_TZ = timezone(timedelta(hours=3))
     now = datetime.now(MOSCOW_TZ)
@@ -139,24 +140,33 @@ def get_now_playing(
         .order_by(BroadcastItem.sort_order)
         .all()
     )
+    empty = {"entityType": None, "entityId": None, "currentTime": current_time, "title": None}
     if not items:
-        return JSONResponse(
-            content={"entityType": None, "entityId": None, "currentTime": current_time},
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
-        )
+        return JSONResponse(content=empty, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
     for it in items:
         parts = (it.start_time or "00:00:00").split(":")
         start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
         end_sec = start_sec + int(it.duration_seconds or 0)
         if start_sec <= now_sec < end_sec:
+            title = None
+            if it.metadata_json:
+                try:
+                    meta = json.loads(it.metadata_json)
+                    title = meta.get("title", "")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if not title:
+                title = get_entity_meta(db, it.entity_type, it.entity_id)
             return JSONResponse(
-                content={"entityType": it.entity_type, "entityId": it.entity_id, "currentTime": current_time},
+                content={
+                    "entityType": it.entity_type,
+                    "entityId": it.entity_id,
+                    "currentTime": current_time,
+                    "title": title or "—",
+                },
                 headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
             )
-    return JSONResponse(
-        content={"entityType": None, "entityId": None, "currentTime": current_time},
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
-    )
+    return JSONResponse(content=empty, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
 
 
 def _get_entity_text(db: Session, entity_type: str, entity_id: int) -> str | None:

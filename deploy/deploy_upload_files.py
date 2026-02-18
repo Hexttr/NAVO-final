@@ -22,6 +22,8 @@ FILES = [
     ("frontend/src/api.js", f"{APP_DIR}/frontend/src/api.js"),
     ("frontend/src/pages/admin/Broadcast.jsx", f"{APP_DIR}/frontend/src/pages/admin/Broadcast.jsx"),
     ("frontend/src/pages/admin/Broadcast.css", f"{APP_DIR}/frontend/src/pages/admin/Broadcast.css"),
+    ("frontend/src/pages/Player.jsx", f"{APP_DIR}/frontend/src/pages/Player.jsx"),
+    ("frontend/src/pages/Player.css", f"{APP_DIR}/frontend/src/pages/Player.css"),
 ]
 
 
