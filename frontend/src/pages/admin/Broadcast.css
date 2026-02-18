@@ -88,6 +88,12 @@
   font-weight: 500;
 }
 
+.broadcast-moscow-time {
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
 .broadcast-expand-btn {
   display: inline-flex;
   align-items: center;

@@ -54,7 +54,7 @@ export default function Broadcast() {
   const [catalog, setCatalog] = useState({ songs: [], news: [], weather: [], podcasts: [], intros: [] });
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
-  const [nowPlaying, setNowPlaying] = useState({ entityType: null, entityId: null });
+  const [nowPlaying, setNowPlaying] = useState({ entityType: null, entityId: null, currentTime: null });
   const [expandedId, setExpandedId] = useState(null);
   const [editingText, setEditingText] = useState("");
   const [savingId, setSavingId] = useState(null);
@@ -86,14 +86,14 @@ export default function Broadcast() {
   useEffect(() => {
     const today = moscowDateStr();
     if (selectedDate !== today) {
-      setNowPlaying({ entityType: null, entityId: null });
+      setNowPlaying({ entityType: null, entityId: null, currentTime: null });
       return;
     }
     const poll = () => {
       getBroadcastNowPlaying(selectedDate).then(setNowPlaying).catch(() => {});
     };
     poll();
-    const id = setInterval(poll, 5000);
+    const id = setInterval(poll, 2000);
     return () => clearInterval(id);
   }, [selectedDate]);
 
@@ -354,8 +354,12 @@ export default function Broadcast() {
       if (idx >= 0) return idx;
     }
     if (isToday) {
-      const now = new Date();
-      const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      const nowSec = nowPlaying.currentTime
+        ? parseTimeToSeconds(nowPlaying.currentTime)
+        : (() => {
+            const d = new Date(Date.now() + 3 * 3600 * 1000);
+            return (d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds());
+          })();
       for (let i = 0; i < items.length; i++) {
         const start = parseTimeToSeconds(items[i].start_time);
         const end = start + (items[i].duration_seconds || 0);
@@ -430,6 +434,11 @@ export default function Broadcast() {
           </button>
         </div>
         <div className="broadcast-actions-count">
+          {isToday && nowPlaying.currentTime && (
+            <span className="broadcast-moscow-time" title="Время сервера (Москва)">
+              МСК {nowPlaying.currentTime}
+            </span>
+          )}
           <span>{items.length} элементов</span>
           {items.length > VISIBLE_ROWS && (
             <button
