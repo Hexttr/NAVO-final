@@ -177,12 +177,16 @@ export default function Player() {
       )}
       <audio
         ref={audioRef}
+        preload="none"
         onPlay={() => {
           setPlaying(true);
+          setLoading(false);
           retryCountRef.current = 0;
         }}
         onPause={() => setPlaying(false)}
         onError={handleAudioError}
+        onWaiting={() => setLoading(true)}
+        onCanPlay={() => setLoading(false)}
       />
     </div>
   );
