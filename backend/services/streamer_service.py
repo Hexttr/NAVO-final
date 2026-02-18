@@ -460,6 +460,7 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
         bitrate = getattr(settings, "stream_bitrate", "256k") or "256k"
         args = [
             "ffmpeg", "-y", "-loglevel", "error",
+            "-stream_loop", "-1",
             "-ss", str(total_seek),
             "-f", "concat", "-safe", "0", "-i", str(concat_path),
             "-c:a", "libmp3lame", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
