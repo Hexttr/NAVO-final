@@ -227,9 +227,11 @@ def delete_broadcast(
 
 @router.post("/recalc-durations")
 def recalc_all_durations(db: Session = Depends(get_db)):
-    """Пересчитать длительность всех аудио из файлов (ffprobe). Для точной эфирной сетки."""
+    """Пересчитать длительность всех аудио из файлов (ffprobe). Обновляет сущности и BroadcastItem — точное совпадение админки и эфира."""
     from models import Song, Podcast, Intro
-    updated = {"songs": 0, "podcasts": 0, "intros": 0}
+    from services.broadcast_service import get_entity_duration, recalc_times
+
+    updated = {"songs": 0, "podcasts": 0, "intros": 0, "broadcast_items": 0}
     for s in db.query(Song).filter(Song.file_path != "").all():
         dur = get_entity_duration_from_file(db, "song", s.id)
         if dur > 0 and (not s.duration_seconds or abs(s.duration_seconds - dur) > 1):
@@ -245,9 +247,27 @@ def recalc_all_durations(db: Session = Depends(get_db)):
         if dur > 0 and (not i.duration_seconds or abs(i.duration_seconds - dur) > 1):
             i.duration_seconds = round(dur, 1)
             updated["intros"] += 1
+
+    # Обновить duration_seconds в BroadcastItem — админка и стрим используют одни и те же тайминги
+    for item in db.query(BroadcastItem).filter(BroadcastItem.entity_type != "empty").all():
+        try:
+            dur = get_entity_duration(db, item.entity_type, item.entity_id)
+            if dur > 0 and (not item.duration_seconds or abs(item.duration_seconds - dur) > 0.5):
+                item.duration_seconds = round(dur, 1)
+                updated["broadcast_items"] += 1
+        except ValueError:
+            pass
     db.commit()
+
+    # Пересчитать start_time/end_time для всех дат
+    dates = {r[0] for r in db.query(BroadcastItem.broadcast_date).distinct().all()}
+    for d in dates:
+        items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
+        recalc_times(db, d, items)
+    db.commit()
+
     total = sum(updated.values())
-    return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро"}
+    return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро, {updated['broadcast_items']} слотов эфира"}
 
 
 @router.post("/generate")
@@ -373,3 +393,109 @@ def move_item(
 def get_stream_url():
     """Return Icecast stream URL for frontend player."""
     return {"url": "http://localhost:8000/stream"}  # TODO: configure Icecast URL
+
+
+@router.get("/debug-concat")
+def debug_concat(
+    d: date | None = Query(None, description="Date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """
+    Отладка ffmpeg_concat: создаёт concat, запускает ffmpeg на 3 сек, возвращает результат.
+    Помогает понять, почему стрим не стартует (404).
+    """
+    from pathlib import Path
+    from services.streamer_service import (
+        get_playlist_with_times,
+        moscow_date,
+        _find_current_position,
+        _create_concat_file,
+        _get_file_duration_sec,
+    )
+    from datetime import datetime, timezone, timedelta
+
+    broadcast_date = d or moscow_date()
+    playlist = get_playlist_with_times(db, broadcast_date)
+    if not playlist:
+        return {"ok": False, "error": "Нет эфира на дату", "playlist_count": 0}
+
+    concat_path = _create_concat_file(playlist)
+    if not concat_path or not concat_path.exists():
+        return {
+            "ok": False,
+            "error": "concat не создан (нет файлов или ffmpeg)",
+            "playlist_count": len(playlist),
+            "concat_path": str(concat_path) if concat_path else None,
+        }
+
+    # Читаем concat для отладки
+    concat_content = ""
+    try:
+        concat_content = concat_path.read_text(encoding="utf-8", errors="replace")[:2000]
+    except Exception as e:
+        concat_content = str(e)
+
+    now = datetime.now(timezone(timedelta(hours=3)))
+    now_sec = now.hour * 3600 + now.minute * 60 + now.second
+    start_idx, seek_sec = _find_current_position(playlist, now_sec)
+    total_seek = 0.0
+    for i in range(start_idx):
+        path, _, dur = playlist[i][0], playlist[i][1], playlist[i][2]
+        if path and path.exists():
+            d = _get_file_duration_sec(path)
+            total_seek += d if d > 0 else float(dur or 0)
+        else:
+            total_seek += float(dur or 0)
+    if start_idx < len(playlist):
+        item_path = playlist[start_idx][0]
+        if item_path and item_path.exists():
+            total_seek += seek_sec
+        else:
+            total_seek += min(seek_sec, float(playlist[start_idx][2] or 0))
+
+    import subprocess
+    bitrate = getattr(settings, "stream_bitrate", "256k") or "256k"
+    try:
+        r = subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "warning",
+                "-ss", str(total_seek),
+                "-f", "concat", "-safe", "0", "-i", str(concat_path),
+                "-t", "3",
+                "-c:a", "libmp3lame", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
+                "-f", "mp3", "pipe:1",
+            ],
+            capture_output=True,
+            timeout=15,
+        )
+        out, err, ret = r.stdout, r.stderr, r.returncode
+    except Exception as e:
+        try:
+            concat_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return {
+            "ok": False,
+            "error": str(e),
+            "playlist_count": len(playlist),
+            "concat_preview": concat_content[:500],
+        }
+
+    try:
+        concat_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    return {
+        "ok": ret == 0,
+        "playlist_count": len(playlist),
+        "start_idx": start_idx,
+        "seek_sec": seek_sec,
+        "total_seek": total_seek,
+        "concat_lines": len(concat_content.strip().splitlines()),
+        "concat_preview": concat_content[:800],
+        "ffmpeg_returncode": ret,
+        "ffmpeg_stderr": err.decode(errors="replace")[:1000] if err else "",
+        "first_chunk_bytes": len(out) if out else 0,
+        "stream_bitrate": bitrate,
+    }

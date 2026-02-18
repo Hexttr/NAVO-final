@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./navo.db"
     upload_dir: str = "uploads"
     base_url: str = "https://navoradio.com"
+    # STREAM_BITRATE: 128k, 256k, 320k, 512k — выше = лучше качество, ~4× трафик
+    stream_bitrate: str = "256k"
 
     class Config:
         env_file = str(_env_path)

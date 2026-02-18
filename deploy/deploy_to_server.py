@@ -103,6 +103,9 @@ def main(dry_run=False):
             run(client, "systemctl daemon-reload")
             run(client, "systemctl enable navo-radio")
             run(client, "systemctl restart navo-radio")
+            out, _, code = run(client, "systemctl is-active navo-radio-source", check=False)
+            if code == 0:
+                run(client, "systemctl restart navo-radio-source")
 
         print("\nГотово!")
         if not dry_run:

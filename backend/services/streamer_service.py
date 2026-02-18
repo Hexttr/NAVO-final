@@ -353,35 +353,66 @@ def _get_or_create_silence_1sec() -> Path | None:
         return None
 
 
+def _get_or_create_silence_mp3(duration_sec: int) -> Path | None:
+    """
+    Создаёт MP3 тишины заданной длительности. Кэш по секундам.
+    Директива duration в ffconcat ненадёжна — используем реальные файлы.
+    """
+    if duration_sec <= 0:
+        return _get_or_create_silence_1sec()
+    cache_dir = Path(tempfile.gettempdir()) / "navo_silence"
+    cache_dir.mkdir(exist_ok=True)
+    cache = cache_dir / f"silence_{duration_sec}s.mp3"
+    if cache.exists():
+        return cache
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                "-t", str(duration_sec), "-q:a", "9", "-acodec", "libmp3lame",
+                str(cache),
+            ],
+            capture_output=True,
+            timeout=max(10, duration_sec + 5),
+            check=False,
+        )
+        return cache if cache.exists() else _get_or_create_silence_1sec()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return _get_or_create_silence_1sec()
+
+
+def _path_for_concat(p: Path) -> str:
+    """Путь для ffconcat: forward slashes, экранирование кавычек."""
+    return str(p.resolve()).replace("\\", "/").replace("'", "'\\''")
+
+
 def _create_concat_file(playlist: list[tuple]) -> Path | None:
     """
-    Создаёт concat-файл для FFmpeg. Включает path=None как тишину (duration).
+    Создаёт concat-файл для FFmpeg. path=None → реальный файл тишины (duration в ffconcat ненадёжна).
     Повторяем плейлист 2 раза для бесшовного перехода в полночь.
     """
-    silence_path = _get_or_create_silence_1sec()
     lines = ["ffconcat version 1.0", ""]
     has_any = False
     for path, _, dur, _ in playlist:
         if path is not None and path.exists():
-            abs_path = str(path.resolve()).replace("'", "'\\''")
-            lines.append(f"file '{abs_path}'")
+            lines.append(f"file '{_path_for_concat(path)}'")
             has_any = True
-        elif silence_path and dur > 0:
-            abs_path = str(silence_path.resolve()).replace("'", "'\\''")
-            lines.append(f"file '{abs_path}'")
-            lines.append(f"duration {int(dur)}")
-            has_any = True
+        elif dur > 0:
+            silence_path = _get_or_create_silence_mp3(int(dur))
+            if silence_path and silence_path.exists():
+                lines.append(f"file '{_path_for_concat(silence_path)}'")
+                has_any = True
     if not has_any or len(lines) <= 2:
         return None
     # Дублируем плейлист для зацикливания (2 суток)
     for path, _, dur, _ in playlist:
         if path is not None and path.exists():
-            abs_path = str(path.resolve()).replace("'", "'\\''")
-            lines.append(f"file '{abs_path}'")
-        elif silence_path and dur > 0:
-            abs_path = str(silence_path.resolve()).replace("'", "'\\''")
-            lines.append(f"file '{abs_path}'")
-            lines.append(f"duration {int(dur)}")
+            lines.append(f"file '{_path_for_concat(path)}'")
+        elif dur > 0:
+            silence_path = _get_or_create_silence_mp3(int(dur))
+            if silence_path and silence_path.exists():
+                lines.append(f"file '{_path_for_concat(silence_path)}'")
     fd, p = tempfile.mkstemp(suffix=".concat", prefix="navo_")
     with open(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -424,13 +455,14 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
         return
     chunk_size = 32 * 1024
     try:
-        # Реэнкод в единый формат — разные битрейты/сэмплрейты при concat могут вызывать
-        # обрыв потока у Icecast при переключении треков
+        # Реэнкод в единый формат — разные битрейты/сэмплрейты при concat вызывают
+        # обрыв потока у Icecast и «обрезку» MP3 при переключении треков
+        bitrate = getattr(settings, "stream_bitrate", "256k") or "256k"
         args = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-ss", str(total_seek),
             "-f", "concat", "-safe", "0", "-i", str(concat_path),
-            "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+            "-c:a", "libmp3lame", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
             "-f", "mp3", "pipe:1",
         ]
         proc = await asyncio.create_subprocess_exec(

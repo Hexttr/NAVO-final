@@ -17,6 +17,7 @@ from database import SessionLocal
 from services.streamer_service import (
     get_playlist_with_times,
     stream_broadcast_async,
+    stream_broadcast_ffmpeg_concat,
     moscow_date,
     _find_current_position,
     get_broadcast_schedule_hash,
@@ -26,6 +27,8 @@ ICECAST_HOST = os.environ.get("ICECAST_HOST", "127.0.0.1")
 ICECAST_PORT = int(os.environ.get("ICECAST_PORT", "8001"))
 ICECAST_MOUNT = os.environ.get("ICECAST_MOUNT", "live")
 ICECAST_SOURCE_PASSWORD = os.environ.get("ICECAST_SOURCE_PASSWORD", "navo-icecast-source-2024")
+# STREAM_MODE=ffmpeg_concat — единый формат, без обрезки MP3; async — сырая конкатенация (по умолчанию)
+STREAM_MODE = os.environ.get("STREAM_MODE", "async").lower()
 CHUNK_SIZE = 32 * 1024
 
 shutdown = False
@@ -61,7 +64,7 @@ def main():
             now = datetime.now(timezone(timedelta(hours=3)))
             now_sec = now.hour * 3600 + now.minute * 60 + now.second
             start_idx, seek_sec = _find_current_position(playlist, now_sec)
-            print(f"Стриминг эфира в Icecast ({len(playlist)} треков), старт: idx={start_idx} seek={seek_sec}s ({now.hour:02d}:{now.minute:02d}:{now.second:02d} МСК)")
+            print(f"Стриминг эфира в Icecast ({len(playlist)} треков, mode={STREAM_MODE}), старт: idx={start_idx} seek={seek_sec}s ({now.hour:02d}:{now.minute:02d}:{now.second:02d} МСК)")
             icecast_url = f"icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}/{ICECAST_MOUNT}"
             ffmpeg_cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
@@ -76,8 +79,10 @@ def main():
                 stderr=asyncio.subprocess.PIPE,
             )
 
+            stream_gen = stream_broadcast_ffmpeg_concat if STREAM_MODE == "ffmpeg_concat" else stream_broadcast_async
+
             async def stream_chunks():
-                async for chunk in stream_broadcast_async(playlist, sync_to_moscow=True):
+                async for chunk in stream_gen(playlist, sync_to_moscow=True):
                     if shutdown:
                         return
                     proc.stdin.write(chunk)
