@@ -15,6 +15,23 @@ import {
 } from "../../api";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const TTS_BATCH_KEY = "navo_tts_batch";
+const DJ_BATCH_KEY = "navo_dj_batch";
+
+function loadBatch(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveBatch(key, data) {
+  if (data) localStorage.setItem(key, JSON.stringify(data));
+  else localStorage.removeItem(key);
+}
+
 import "./EntityPage.css";
 
 export default function SongsDj() {
@@ -36,6 +53,74 @@ export default function SongsDj() {
   useEffect(() => {
     load();
     getTtsVoices().then((r) => setVoices(r.voices || []));
+  }, []);
+
+  useEffect(() => {
+    const batch = loadBatch(TTS_BATCH_KEY);
+    if (!batch?.songIds?.length) return;
+    const voice = batch.voice || "ru-RU-DmitryNeural";
+    const runResume = async () => {
+      const songsList = await getSongs();
+      const byId = Object.fromEntries((songsList || []).map((s) => [s.id, s]));
+      const remaining = batch.songIds.filter((id) => {
+        const s = byId[id];
+        return s?.dj_text && !s?.dj_audio_path;
+      });
+      if (remaining.length === 0) {
+        saveBatch(TTS_BATCH_KEY, null);
+        load();
+        return;
+      }
+      const completed = batch.total - remaining.length;
+      setTtsBatchProgress({ current: completed, total: batch.total });
+      if (batch.voice) setSelectedVoice(batch.voice);
+      for (let i = 0; i < remaining.length; i++) {
+        try {
+          await generateDjTts(remaining[i], voice);
+        } catch (e) {
+          console.warn("TTS:", remaining[i], e);
+        }
+        setTtsBatchProgress({ current: completed + i + 1, total: batch.total });
+        if (i < remaining.length - 1) await sleep(300);
+      }
+      saveBatch(TTS_BATCH_KEY, null);
+      setTtsBatchProgress(null);
+      load();
+    };
+    runResume();
+  }, []);
+
+  useEffect(() => {
+    const batch = loadBatch(DJ_BATCH_KEY);
+    if (!batch?.songIds?.length) return;
+    const runResume = async () => {
+      const songsList = await getSongs();
+      const byId = Object.fromEntries((songsList || []).map((s) => [s.id, s]));
+      const remaining = batch.songIds.filter((id) => {
+        const s = byId[id];
+        return s?.file_path && !s?.dj_text;
+      });
+      if (remaining.length === 0) {
+        saveBatch(DJ_BATCH_KEY, null);
+        load();
+        return;
+      }
+      const completed = batch.total - remaining.length;
+      setDjBatchProgress({ current: completed, total: batch.total });
+      for (let i = 0; i < remaining.length; i++) {
+        try {
+          await generateDj(remaining[i]);
+        } catch (e) {
+          console.warn("DJ:", remaining[i], e);
+        }
+        setDjBatchProgress({ current: completed + i + 1, total: batch.total });
+        if (i < remaining.length - 1) await sleep(2100);
+      }
+      saveBatch(DJ_BATCH_KEY, null);
+      setDjBatchProgress(null);
+      load();
+    };
+    runResume();
   }, []);
 
   const load = () => {
@@ -90,6 +175,8 @@ export default function SongsDj() {
       alert("Нет песен с загруженным файлом");
       return;
     }
+    saveBatch(TTS_BATCH_KEY, null);
+    saveBatch(DJ_BATCH_KEY, { songIds: ids, total: ids.length });
     setDjBatchProgress({ current: 0, total: ids.length });
     for (let i = 0; i < ids.length; i++) {
       try {
@@ -103,6 +190,7 @@ export default function SongsDj() {
       setDjBatchProgress({ current: i + 1, total: ids.length });
       if (i < ids.length - 1) await sleep(2100);
     }
+    saveBatch(DJ_BATCH_KEY, null);
     setDjBatchProgress(null);
   };
 
@@ -121,6 +209,8 @@ export default function SongsDj() {
       alert("Нет треков с текстом DJ для озвучки");
       return;
     }
+    saveBatch(DJ_BATCH_KEY, null);
+    saveBatch(TTS_BATCH_KEY, { songIds: ids, total: ids.length, voice: selectedVoice });
     setTtsBatchProgress({ current: 0, total: ids.length });
     for (let i = 0; i < ids.length; i++) {
       try {
@@ -132,7 +222,9 @@ export default function SongsDj() {
         console.warn(`TTS для ${ids[i]} не выполнен:`, e);
       }
       setTtsBatchProgress({ current: i + 1, total: ids.length });
+      if (i < ids.length - 1) await sleep(300);
     }
+    saveBatch(TTS_BATCH_KEY, null);
     setTtsBatchProgress(null);
   };
 
