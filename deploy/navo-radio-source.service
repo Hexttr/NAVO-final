@@ -1,7 +1,6 @@
 [Unit]
 Description=NAVO RADIO Icecast Source (feeds broadcast to Icecast)
-After=network.target icecast-navoradio.service
-Requires=icecast-navoradio.service
+After=network.target icecast2.service
 
 [Service]
 Type=simple

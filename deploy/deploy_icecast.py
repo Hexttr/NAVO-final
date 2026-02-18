@@ -34,28 +34,32 @@ def main():
         print("1. Установка Icecast2...")
         run(client, "apt-get update -qq && apt-get install -y -qq icecast2", check=False)
 
-        print("2. Создание директорий Icecast...")
-        run(client, "mkdir -p /var/log/icecast2 /var/run/icecast2", check=False)
+        print("2. Настройка Icecast (порт 8001)...")
+        run(client, "cp /etc/icecast2/icecast.xml /etc/icecast2/icecast.xml.bak 2>/dev/null; true", check=False)
+        run(client, "sed -i 's/<port>8000<\\/port>/<port>8001<\\/port>/' /etc/icecast2/icecast.xml 2>/dev/null; true", check=False)
+        run(client, "sed -i 's/<source-password>hackme<\\/source-password>/<source-password>navo-icecast-source-2024<\\/source-password>/' /etc/icecast2/icecast.xml 2>/dev/null; true", check=False)
 
         print("3. Копирование конфигов...")
         sftp = client.open_sftp()
-        for f in ["icecast.xml", "icecast-navoradio.service", "navo-radio-source.service"]:
+        for f in ["navo-radio-source.service"]:
             local = os.path.join(SCRIPT_DIR, f)
             if os.path.exists(local):
-                remote = f"{APP}/deploy/{f}"
-                sftp.put(local, remote)
+                sftp.put(local, f"/etc/systemd/system/{f}")
         sftp.close()
 
         print("4. Systemd...")
-        run(client, f"cp {APP}/deploy/icecast-navoradio.service /etc/systemd/system/")
-        run(client, f"cp {APP}/deploy/navo-radio-source.service /etc/systemd/system/")
-        run(client, "systemctl daemon-reload")
-        run(client, "systemctl enable icecast-navoradio navo-radio-source")
-        run(client, "systemctl start icecast-navoradio")
+        run(client, "systemctl enable icecast2")
+        run(client, "systemctl restart icecast2")
         run(client, "sleep 2")
-        run(client, "systemctl start navo-radio-source")
+        run(client, "systemctl daemon-reload")
+        run(client, "systemctl enable navo-radio-source")
+        run(client, "systemctl restart navo-radio-source")
 
-        print("5. Nginx...")
+        print("5. Frontend...")
+        run(client, f"cd {APP}/frontend && npm ci --silent 2>/dev/null || npm install --silent")
+        run(client, f"cd {APP}/frontend && VITE_API_URL=https://navoradio.com npm run build")
+
+        print("6. Nginx...")
         with open(os.path.join(SCRIPT_DIR, "nginx-navoradio.conf"), "r", encoding="utf-8") as f:
             nginx = f.read()
         sftp = client.open_sftp()
@@ -65,9 +69,9 @@ def main():
         run(client, "nginx -t")
         run(client, "systemctl reload nginx")
 
-        print("6. Проверка...")
-        out, _, _ = run(client, "systemctl is-active icecast-navoradio", check=False)
-        print(f"   icecast-navoradio: {out.strip()}")
+        print("7. Проверка...")
+        out, _, _ = run(client, "systemctl is-active icecast2", check=False)
+        print(f"   icecast2: {out.strip()}")
         out, _, _ = run(client, "systemctl is-active navo-radio-source", check=False)
         print(f"   navo-radio-source: {out.strip()}")
 
