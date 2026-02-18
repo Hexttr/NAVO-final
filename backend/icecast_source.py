@@ -27,8 +27,8 @@ ICECAST_HOST = os.environ.get("ICECAST_HOST", "127.0.0.1")
 ICECAST_PORT = int(os.environ.get("ICECAST_PORT", "8001"))
 ICECAST_MOUNT = os.environ.get("ICECAST_MOUNT", "live")
 ICECAST_SOURCE_PASSWORD = os.environ.get("ICECAST_SOURCE_PASSWORD", "navo-icecast-source-2024")
-# STREAM_MODE=ffmpeg_concat — единый формат, без обрезки MP3; async — сырая конкатенация (по умолчанию)
-STREAM_MODE = os.environ.get("STREAM_MODE", "async").lower()
+# STREAM_MODE=ffmpeg_concat — единый формат, без обрезки на стыках; async — сырая конкатенация (обрезает DJ)
+STREAM_MODE = os.environ.get("STREAM_MODE", "ffmpeg_concat").lower()
 CHUNK_SIZE = 32 * 1024
 
 shutdown = False

@@ -314,8 +314,8 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
                         skip_bytes = _find_mp3_frame_sync(f, skip_bytes)
                         f.seek(skip_bytes)
                     else:
-                        if not (first_round and idx == start_idx):
-                            _skip_id3_and_find_sync(f)
+                        # Всегда пропускать ID3 при чтении с начала — иначе первый файл без seek мог отдавать ID3 как аудио
+                        _skip_id3_and_find_sync(f)
                     while True:
                         chunk = f.read(CHUNK_SIZE)
                         if not chunk:
