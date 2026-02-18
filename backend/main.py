@@ -93,9 +93,9 @@ def stream_test(
     d: date | None = Query(None, description="Date YYYY-MM-DD"),
 ):
     """Тест: один файл. Открой /stream-test?d=2026-02-17 — если играет, проблема в мульти-стриме."""
-    from datetime import date as dt
+    from services.streamer_service import moscow_date
 
-    broadcast_date = d or dt.today()
+    broadcast_date = d or moscow_date()
     db = next(get_db())
     try:
         playlist = get_playlist_with_times(db, broadcast_date)
@@ -116,11 +116,12 @@ async def stream_audio(
 ):
     """Stream broadcast as continuous MP3. FFmpeg subprocess — надёжный chunked encoding. Синхронизация по Москве (UTC+3)."""
     import shutil
-    from datetime import date as dt
+
+    from services.streamer_service import moscow_date
 
     if not shutil.which("ffmpeg"):
         raise HTTPException(503, "FFmpeg не установлен. Установите: https://ffmpeg.org/download.html")
-    broadcast_date = d or dt.today()
+    broadcast_date = d or moscow_date()
     db = next(get_db())
     try:
         playlist = get_playlist_with_times(db, broadcast_date)

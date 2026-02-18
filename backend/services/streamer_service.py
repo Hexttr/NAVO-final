@@ -20,6 +20,11 @@ def _moscow_now() -> datetime:
     return datetime.now(MOSCOW_TZ)
 
 
+def moscow_date() -> date:
+    """Текущая дата по Москве (UTC+3). Для выбора эфира и синхронизации."""
+    return _moscow_now().date()
+
+
 def _parse_time(t: str) -> int:
     """Parse HH:MM:SS to seconds since midnight."""
     parts = t.split(":")

@@ -1,6 +1,11 @@
 const API =
   import.meta.env.DEV ? "http://localhost:8000/api" : "/api";
 
+/** Текущая дата по Москве (UTC+3) в формате YYYY-MM-DD */
+export function moscowDateStr() {
+  return new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 export async function getStats() {
   const r = await fetch(`${API}/admin/stats`);
   return r.json();

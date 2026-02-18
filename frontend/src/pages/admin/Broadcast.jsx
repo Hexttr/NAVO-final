@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Fragment } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import {
+  moscowDateStr,
   getBroadcast,
   getBroadcastNowPlaying,
   generateBroadcast,
@@ -83,7 +84,7 @@ export default function Broadcast() {
   }, [expandedId]);
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = moscowDateStr();
     if (selectedDate !== today) {
       setNowPlaying({ entityType: null, entityId: null });
       return;
@@ -335,7 +336,7 @@ export default function Broadcast() {
   const truncate = (s, n = 30) => (s && s.length > n ? s.slice(0, n) + "…" : s || "—");
 
   const items = data?.items || [];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = moscowDateStr();
   const isToday = selectedDate === today;
 
   const parseTimeToSeconds = (timeStr) => {

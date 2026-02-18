@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { Radio, Calendar, LayoutGrid, Music, Newspaper, CloudSun, Podcast, Mic, ArrowUp } from "lucide-react";
-import { getStats } from "../../api";
+import { getStats, moscowDateStr } from "../../api";
 import "./AdminLayout.css";
 
 const NAV_ITEMS = [
@@ -18,10 +18,7 @@ export default function AdminLayout() {
   const location = useLocation();
   const [stats, setStats] = useState(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  });
+  const [selectedDate, setSelectedDate] = useState(() => moscowDateStr());
 
   useEffect(() => {
     const fetchStats = () => getStats().then(setStats).catch(() => setStats({}));
