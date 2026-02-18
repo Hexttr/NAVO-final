@@ -91,14 +91,17 @@ def main(dry_run=False):
             run(client, "nginx -t")
             run(client, "systemctl reload nginx")
 
-        # 6. Systemd service
+        # 6. Systemd services
         print(f"{prefix}Обновление systemd...")
         if not dry_run:
-            with open(os.path.join(script_dir, "navo-radio.service"), "r", encoding="utf-8") as f:
-                svc = f.read()
             sftp = client.open_sftp()
-            with sftp.file("/etc/systemd/system/navo-radio.service", "w") as remote:
-                remote.write(svc)
+            for svc_name, local_file in [("navo-radio", "navo-radio.service"), ("navo-radio-source", "navo-radio-source.service")]:
+                local_path = os.path.join(script_dir, local_file)
+                if os.path.exists(local_path):
+                    with open(local_path, "r", encoding="utf-8") as f:
+                        svc = f.read()
+                    with sftp.file(f"/etc/systemd/system/{svc_name}.service", "w") as remote:
+                        remote.write(svc)
             sftp.close()
             run(client, "systemctl daemon-reload")
             run(client, "systemctl enable navo-radio")
