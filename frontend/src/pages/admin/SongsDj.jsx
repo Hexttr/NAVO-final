@@ -301,7 +301,7 @@ export default function SongsDj() {
           onClick={handleTtsAll}
           disabled={loading || !!jamendoProgress || !!djBatchProgress || !!ttsBatchProgress || !songs.filter((s) => s.dj_text && !s.dj_audio_path).length}
         >
-          Озвучить DJ для всех
+          Озвучить остатки ({songs.filter((s) => s.dj_text && !s.dj_audio_path).length})
         </button>
       </div>
       {djBatchProgress && (
