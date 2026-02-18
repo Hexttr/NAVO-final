@@ -7,6 +7,7 @@ import {
   getBroadcastNowPlaying,
   generateBroadcast,
   deleteBroadcast,
+  generateHls,
   deleteBroadcastItem,
   insertBroadcastItem,
   moveBroadcastItem,
@@ -61,6 +62,7 @@ export default function Broadcast() {
   const [revoicingId, setRevoicingId] = useState(null);
   const [regeneratingId, setRegeneratingId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [generatingHls, setGeneratingHls] = useState(false);
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
@@ -443,6 +445,26 @@ export default function Broadcast() {
           >
             <Trash2 size={16} />
             {deleting ? "…" : "Удалить эфир"}
+          </button>
+          <button
+            className="broadcast-btn broadcast-btn-secondary"
+            onClick={async () => {
+              setGeneratingHls(true);
+              try {
+                const r = await generateHls(selectedDate);
+                alert(r.message || (r.ok ? "HLS генерируется" : r.error));
+                load();
+              } catch (e) {
+                alert(e.message || "Ошибка");
+              } finally {
+                setGeneratingHls(false);
+              }
+            }}
+            disabled={loading || generatingHls || items.length === 0}
+            title="Обновить HLS после изменений расписания (~2-5 мин)"
+          >
+            {generatingHls ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
+            {generatingHls ? "…" : "Обновить HLS"}
           </button>
         </div>
         <div className="broadcast-actions-count">

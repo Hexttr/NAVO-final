@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
-import { getBroadcastNowPlaying, moscowDateStr } from "../api";
+import Hls from "hls.js";
+import { getBroadcastNowPlaying, getHlsUrl, moscowDateStr } from "../api";
 import "./Player.css";
 
 const STREAM_URL = "/stream";
@@ -8,6 +9,14 @@ const EQ_BARS = 24;
 const BAR_COUNT = EQ_BARS;
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 2000;
+
+/** Текущая секунда дня по Москве (UTC+3) */
+function moscowSecondsNow() {
+  const d = new Date();
+  const moscowMs = d.getTime() + 3 * 3600 * 1000;
+  const m = new Date(moscowMs);
+  return m.getUTCHours() * 3600 + m.getUTCMinutes() * 60 + m.getUTCSeconds();
+}
 
 export default function Player() {
   const [playing, setPlaying] = useState(false);
@@ -17,6 +26,7 @@ export default function Player() {
   const [barHeights, setBarHeights] = useState(() => Array(BAR_COUNT).fill(15));
   const [useAnalyser, setUseAnalyser] = useState(false);
   const audioRef = useRef(null);
+  const hlsRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const sourceRef = useRef(null);
@@ -24,8 +34,62 @@ export default function Player() {
   const rafRef = useRef(null);
   const retryCountRef = useRef(0);
 
-  const playStream = () => {
+  const playStream = async () => {
     if (!audioRef.current) return;
+    const today = moscowDateStr();
+    const hlsUrl = await getHlsUrl(today);
+    const audio = audioRef.current;
+
+    if (hlsUrl) {
+      if (Hls.isSupported()) {
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
+        audio.removeAttribute("src");
+        const hls = new Hls();
+        hlsRef.current = hls;
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(audio);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          const startSec = moscowSecondsNow();
+          audio.currentTime = Math.min(startSec, audio.duration || 86400);
+        });
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal) {
+            hls.destroy();
+            playStreamFallback();
+          }
+        });
+        audio.play().catch((e) => {
+          setError("Не удалось воспроизвести. Проверьте эфир в админке.");
+          setLoading(false);
+        });
+      } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
+        audio.src = hlsUrl;
+        const seekToMoscow = () => {
+          const startSec = moscowSecondsNow();
+          audio.currentTime = Math.min(startSec, audio.duration || 86400);
+        };
+        audio.addEventListener("loadedmetadata", seekToMoscow, { once: true });
+        audio.play().catch((e) => {
+          setError("Не удалось воспроизвести.");
+          setLoading(false);
+        });
+      } else {
+        playStreamFallback();
+      }
+    } else {
+      playStreamFallback();
+    }
+  };
+
+  const playStreamFallback = () => {
+    if (!audioRef.current) return;
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
     audioRef.current.src = STREAM_URL + "?t=" + Date.now();
     audioRef.current.play().catch((e) => {
       setError("Не удалось воспроизвести. Проверьте эфир в админке.");
@@ -37,6 +101,10 @@ export default function Player() {
     setError(null);
     retryCountRef.current = 0;
     if (playing) {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
       audioRef.current?.pause();
       setPlaying(false);
       return;

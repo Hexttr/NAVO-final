@@ -1,6 +1,6 @@
 import json
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
@@ -8,6 +8,7 @@ from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
 from services.streamer_service import get_entity_duration_from_file
+from services.hls_service import generate_hls, get_hls_url
 from config import settings
 
 router = APIRouter(prefix="/broadcast", tags=["broadcast"])
@@ -273,6 +274,7 @@ def recalc_all_durations(db: Session = Depends(get_db)):
 @router.post("/generate")
 def generate(
     d: date = Query(..., description="Date YYYY-MM-DD"),
+    background_tasks: BackgroundTasks = Depends(),
     db: Session = Depends(get_db),
 ):
     try:
@@ -280,7 +282,16 @@ def generate(
         for item in items:
             db.add(item)
         db.commit()
-        return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован"}
+        # HLS в фоне (~2-5 мин)
+        def _run_hls():
+            from database import SessionLocal
+            session = SessionLocal()
+            try:
+                generate_hls(session, d)
+            finally:
+                session.close()
+        background_tasks.add_task(_run_hls)
+        return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~2-5 мин)."}
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -393,6 +404,39 @@ def move_item(
 def get_stream_url():
     """Return Icecast stream URL for frontend player."""
     return {"url": "http://localhost:8000/stream"}  # TODO: configure Icecast URL
+
+
+@router.get("/hls-url")
+def hls_url(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """URL HLS если готов, иначе null. Фронт использует для приоритета HLS над /stream."""
+    url = get_hls_url(db, d)
+    return {"url": url, "hasHls": url is not None}
+
+
+@router.post("/generate-hls")
+def trigger_generate_hls(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    background_tasks: BackgroundTasks = Depends(),
+    db: Session = Depends(get_db),
+):
+    """Запустить генерацию HLS в фоне. 2-5 мин для суток эфира."""
+    playlist = get_playlist_with_times(db, d)
+    if not playlist:
+        raise HTTPException(404, "Нет эфира на дату. Сгенерируйте сетку.")
+
+    def _run():
+        from database import SessionLocal
+        session = SessionLocal()
+        try:
+            generate_hls(session, d)
+        finally:
+            session.close()
+
+    background_tasks.add_task(_run)
+    return {"ok": True, "message": "Генерация HLS запущена в фоне (~2-5 мин). Обновите страницу."}
 
 
 @router.get("/debug-concat")

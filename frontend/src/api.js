@@ -269,6 +269,17 @@ export async function getBroadcastPlaylistUrls(date, sync = true) {
   return r.json();
 }
 
+export async function getHlsUrl(date) {
+  const r = await fetch(`${API}/broadcast/hls-url?d=${date}`);
+  const data = await r.json();
+  return data?.url || null;
+}
+
+export async function generateHls(date) {
+  const r = await fetch(`${API}/broadcast/generate-hls?d=${date}`, { method: "POST" });
+  return r.json();
+}
+
 export async function getBroadcastNowPlaying(date) {
   const r = await fetch(`${API}/broadcast/now-playing?d=${date}&_=${Date.now()}`, {
     cache: "no-store",
