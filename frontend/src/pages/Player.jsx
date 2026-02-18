@@ -50,11 +50,7 @@ export default function Player() {
   const handleAudioError = () => {
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1;
-      setError(`Переподключение (${retryCountRef.current}/${MAX_RETRIES})…`);
-      setTimeout(() => {
-        setError(null);
-        playStream();
-      }, RETRY_DELAY_MS);
+      setTimeout(() => playStream(), RETRY_DELAY_MS);
     } else {
       setError("Ошибка загрузки. Проверьте эфир в админке.");
       retryCountRef.current = 0;
