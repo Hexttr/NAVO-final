@@ -58,7 +58,7 @@ def main(dry_run=False):
         else:
             print(f"{prefix}Обновление репозитория...")
             if not dry_run:
-                run(client, f"cd {APP_DIR} && git fetch origin && git checkout {BRANCH} 2>/dev/null || git checkout main && git pull origin {BRANCH} 2>/dev/null || git pull origin main")
+                run(client, f"cd {APP_DIR} && git fetch origin && (git checkout {BRANCH} 2>/dev/null || git checkout main) && git reset --hard origin/{BRANCH} 2>/dev/null || git reset --hard origin/main")
 
         # 2. Проверка .env
         if not dry_run:
