@@ -3,6 +3,7 @@ Stream broadcast playlist as continuous MP3.
 Синхронизация по московскому времени: воспроизведение с текущего момента эфира.
 """
 import asyncio
+import tempfile
 from datetime import date, datetime, timezone, timedelta
 
 from pathlib import Path
@@ -191,7 +192,12 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
             item = playlist[idx]
             path = item[0]
             duration_sec = item[2]
-            entity_type = item[3] if len(item) > 3 else "song"
+            if not path.exists():
+                idx += 1
+                if idx >= len(playlist):
+                    idx = 0
+                    first_round = False
+                continue
             skip_bytes = 0
             if first_round and idx == start_idx and seek_sec > 0 and duration_sec > 0:
                 try:
@@ -205,7 +211,11 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
                 if size < 100:  # Пустой/битый файл — пропускаем
                     raise OSError("skip")
             except OSError:
-                pass
+                idx += 1
+                if idx >= len(playlist):
+                    idx = 0
+                    first_round = False
+                continue
             else:
                 with open(path, "rb") as f:
                     if skip_bytes:
@@ -227,6 +237,79 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
         if idx >= len(playlist):
             idx = 0
             first_round = False
+
+
+def _create_concat_file(playlist: list[tuple]) -> Path | None:
+    """
+    Создаёт временный concat-файл для FFmpeg.
+    Повторяем плейлист 2 раза для бесшовного перехода в полночь.
+    """
+    lines = ["ffconcat version 1.0", ""]
+    for path, _, _, _ in playlist:
+        if path.exists():
+            abs_path = str(path.resolve()).replace("'", "'\\''")
+            lines.append(f"file '{abs_path}'")
+    if len(lines) <= 2:
+        return None
+    # Дублируем плейлист для зацикливания (2 суток)
+    for path, _, _, _ in playlist:
+        if path.exists():
+            abs_path = str(path.resolve()).replace("'", "'\\''")
+            lines.append(f"file '{abs_path}'")
+    fd, p = tempfile.mkstemp(suffix=".concat", prefix="navo_")
+    with open(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    return Path(p)
+
+
+async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: bool = True):
+    """
+    Один FFmpeg с concat — бесшовные переходы, без пауз между треками.
+    Критично для Icecast: пауза >1 сек вызывает отключение источника.
+    """
+    if not playlist:
+        return
+    now_sec = 0
+    if sync_to_moscow:
+        now = _moscow_now()
+        now_sec = now.hour * 3600 + now.minute * 60 + now.second
+    start_idx, seek_sec = _find_current_position(playlist, now_sec)
+    # Seek в concat = сумма длительностей существующих файлов до start_idx + seek_sec
+    total_seek = 0
+    for i in range(start_idx):
+        if playlist[i][0].exists():
+            total_seek += int(playlist[i][2])
+    if start_idx < len(playlist) and playlist[start_idx][0].exists():
+        total_seek += seek_sec
+    concat_path = _create_concat_file(playlist)
+    if not concat_path or not concat_path.exists():
+        return
+    chunk_size = 32 * 1024
+    try:
+        args = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-ss", str(total_seek),
+            "-f", "concat", "-safe", "0", "-i", str(concat_path),
+            "-c", "copy", "-f", "mp3", "pipe:1",
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            while True:
+                chunk = await proc.stdout.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            await proc.wait()
+    finally:
+        try:
+            concat_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 async def stream_broadcast_async(playlist: list[tuple], sync_to_moscow: bool = True):

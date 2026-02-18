@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal
-from services.streamer_service import get_playlist_with_times, stream_broadcast_async, moscow_date
+from services.streamer_service import get_playlist_with_times, stream_broadcast_ffmpeg_concat, moscow_date
 
 ICECAST_HOST = os.environ.get("ICECAST_HOST", "127.0.0.1")
 ICECAST_PORT = int(os.environ.get("ICECAST_PORT", "8001"))
@@ -64,7 +64,7 @@ def main():
                 stderr=asyncio.subprocess.PIPE,
             )
             try:
-                async for chunk in stream_broadcast_async(playlist, sync_to_moscow=True):
+                async for chunk in stream_broadcast_ffmpeg_concat(playlist, sync_to_moscow=True):
                     if shutdown:
                         break
                     proc.stdin.write(chunk)
