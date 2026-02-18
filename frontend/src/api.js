@@ -1,4 +1,4 @@
-const API = "http://localhost:8000/api";
+const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
 
 export async function getStats() {
   const r = await fetch(`${API}/admin/stats`);

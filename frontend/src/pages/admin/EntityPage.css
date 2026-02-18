@@ -12,6 +12,10 @@
   align-items: flex-end;
 }
 
+.entity-actions-row2 {
+  margin-top: -0.5rem;
+}
+
 .add-manual {
   margin-bottom: 1rem;
 }

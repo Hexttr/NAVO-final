@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2 } from "lucide-react";
+import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import {
   getBroadcast,
   getBroadcastNowPlaying,
@@ -64,12 +64,23 @@ export default function Broadcast() {
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
   const playAudioRef = useRef(null);
+  const activeRowRef = useRef(null);
+  const lastViewIndexRef = useRef(null);
   const [playingItemId, setPlayingItemId] = useState(null);
+  const [gridExpanded, setGridExpanded] = useState(false);
+  const [, setTimeTick] = useState(0);
+
+  const VISIBLE_ROWS = 11;
 
   useEffect(() => {
     setConfirmGen(false);
+    lastViewIndexRef.current = null;
     load();
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (expandedId) lastViewIndexRef.current = null;
+  }, [expandedId]);
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -98,7 +109,7 @@ export default function Broadcast() {
     if (textareaRef.current && expandedId) {
       const ta = textareaRef.current;
       ta.style.height = "0";
-      ta.style.height = Math.max(40, ta.scrollHeight) + "px";
+      ta.style.height = Math.max(120, ta.scrollHeight) + "px";
     }
   }, [editingText, expandedId]);
 
@@ -154,6 +165,9 @@ export default function Broadcast() {
   const handleDelete = async (item) => {
     if (item.entity_type === "empty") return;
     if (!confirm("Удалить эту позицию? Останется пустой слот.")) return;
+    const deletedIdx = items.findIndex((i) => i.id === item.id);
+    if (deletedIdx >= 0) lastViewIndexRef.current = deletedIdx;
+    if (expandedId === item.id) setExpandedId(null);
     try {
       await deleteBroadcastItem(item.id, selectedDate);
       load();
@@ -323,6 +337,64 @@ export default function Broadcast() {
   const items = data?.items || [];
   const today = new Date().toISOString().slice(0, 10);
   const isToday = selectedDate === today;
+
+  const parseTimeToSeconds = (timeStr) => {
+    if (!timeStr) return 0;
+    const parts = String(timeStr).split(":").map(Number);
+    return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+  };
+
+  const getActiveIndex = () => {
+    if (items.length === 0) return 0;
+    if (isToday && nowPlaying.entityType && nowPlaying.entityId != null) {
+      const idx = items.findIndex(
+        (i) => i.entity_type === nowPlaying.entityType && i.entity_id === nowPlaying.entityId
+      );
+      if (idx >= 0) return idx;
+    }
+    if (isToday) {
+      const now = new Date();
+      const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      for (let i = 0; i < items.length; i++) {
+        const start = parseTimeToSeconds(items[i].start_time);
+        const end = start + (items[i].duration_seconds || 0);
+        if (nowSec >= start && nowSec < end) return i;
+      }
+      if (nowSec < parseTimeToSeconds(items[0]?.start_time)) return 0;
+    }
+    return Math.max(0, items.length - 1);
+  };
+
+  const activeIndex = getActiveIndex();
+  const half = Math.floor(VISIBLE_ROWS / 2);
+  const expandedIdx = expandedId ? items.findIndex((i) => i.id === expandedId) : -1;
+  const savedViewIdx = lastViewIndexRef.current;
+  const centerIndex =
+    expandedIdx >= 0
+      ? expandedIdx
+      : savedViewIdx != null
+        ? Math.min(savedViewIdx, Math.max(0, items.length - 1))
+        : activeIndex;
+  const startIdx = Math.max(0, Math.min(centerIndex - half, items.length - VISIBLE_ROWS));
+  const endIdx = Math.min(startIdx + VISIBLE_ROWS, items.length);
+  const visibleItems = gridExpanded || items.length <= VISIBLE_ROWS
+    ? items
+    : items.slice(startIdx, endIdx);
+  const visibleStartIdx = gridExpanded || items.length <= VISIBLE_ROWS ? 0 : startIdx;
+
+  useEffect(() => {
+    if (!gridExpanded && isToday && items.length > VISIBLE_ROWS) {
+      const id = setInterval(() => setTimeTick((t) => t + 1), 60000);
+      return () => clearInterval(id);
+    }
+  }, [gridExpanded, isToday, items.length]);
+
+  useEffect(() => {
+    if (gridExpanded && activeRowRef.current) {
+      activeRowRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [gridExpanded]);
+
   const isNowPlaying = (item) =>
     isToday &&
     nowPlaying.entityType &&
@@ -357,11 +429,25 @@ export default function Broadcast() {
           </button>
         </div>
         <div className="broadcast-actions-count">
-          {items.length} элементов
+          <span>{items.length} элементов</span>
+          {items.length > VISIBLE_ROWS && (
+            <button
+              type="button"
+              className="broadcast-expand-btn"
+              onClick={() => setGridExpanded((v) => !v)}
+              title={gridExpanded ? "Свернуть сетку" : "Развернуть всю сетку"}
+            >
+              {gridExpanded ? (
+                <><ChevronUp size={14} /> Свернуть</>
+              ) : (
+                <><ChevronDown size={14} /> Развернуть</>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
-      {loading ? (
+      {loading && !data?.items?.length ? (
         <div className="loading">Загрузка...</div>
       ) : (
         <div className="broadcast-grid">
@@ -378,18 +464,21 @@ export default function Broadcast() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item, idx) => (
+              {visibleItems.map((item, idx) => {
+                const realIdx = visibleStartIdx + idx;
+                return (
                 <Fragment key={item.id}>
                   <tr
                     key={item.id}
-                    className={`type-${item.entity_type} ${dragIndex === idx ? "dragging" : ""} ${dragOverIndex === idx && dragIndex != null && dragIndex !== idx ? "drag-over" : ""} ${isNowPlaying(item) ? "now-playing" : ""} ${expandedId === item.id ? "expanded" : ""}`}
+                    ref={realIdx === activeIndex ? activeRowRef : undefined}
+                    className={`type-${item.entity_type} ${dragIndex === realIdx ? "dragging" : ""} ${dragOverIndex === realIdx && dragIndex != null && dragIndex !== realIdx ? "drag-over" : ""} ${isNowPlaying(item) ? "now-playing" : ""} ${expandedId === item.id ? "expanded" : ""}`}
                     draggable
-                    onDragStart={(e) => handleDragStart(e, idx)}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    onDrop={(e) => handleDrop(e, idx)}
+                    onDragStart={(e) => handleDragStart(e, realIdx)}
+                    onDragOver={(e) => handleDragOver(e, realIdx)}
+                    onDrop={(e) => handleDrop(e, realIdx)}
                     onDragEnd={handleDragEnd}
                   >
-                    <td className="col-num">{idx + 1}</td>
+                    <td className="col-num">{realIdx + 1}</td>
                     <td>{item.start_time}</td>
                     <td>{TYPE_LABELS[item.entity_type] || item.entity_type}</td>
                     <td className="col-desc">
@@ -490,7 +579,11 @@ export default function Broadcast() {
                               disabled={regeneratingId === item.id}
                               title="Получить новый текст из источников (RSS/прогноз)"
                             >
-                              {regeneratingId === item.id ? "…" : <><RotateCcw size={14} /> Перегенерировать текст</>}
+                              {regeneratingId === item.id ? (
+                                <><Loader2 size={14} className="regen-btn-spinner" /> Генерирую текст</>
+                              ) : (
+                                <><RotateCcw size={14} /> Перегенерировать текст</>
+                              )}
                             </button>
                             <button
                               type="button"
@@ -506,7 +599,11 @@ export default function Broadcast() {
                               onClick={() => handleRevoice(item)}
                               disabled={revoicingId === item.id}
                             >
-                              {revoicingId === item.id ? "…" : <><Volume2 size={14} /> Переозвучить</>}
+                              {revoicingId === item.id ? (
+                                <><Loader2 size={14} className="revoice-btn-spinner" /> Озвучиваю</>
+                              ) : (
+                                <><Volume2 size={14} /> Переозвучить</>
+                              )}
                             </button>
                             <button
                               type="button"
@@ -522,7 +619,8 @@ export default function Broadcast() {
                     </tr>
                   )}
                 </Fragment>
-              ))}
+              );
+              })}
             </tbody>
           </table>
           {items.length === 0 && (

@@ -191,6 +191,8 @@ export default function SongsDj() {
             Добавить вручную
           </button>
         </div>
+      </div>
+      <div className="entity-actions entity-actions-row2">
         <button className="primary" onClick={handleJamendo} disabled={!!jamendoProgress}>
           Сгенерировать из Jamendo
         </button>

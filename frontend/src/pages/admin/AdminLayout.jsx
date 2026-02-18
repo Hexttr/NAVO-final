@@ -1,6 +1,6 @@
-import { Outlet, NavLink } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { Radio, Calendar, LayoutGrid, Music, Newspaper, CloudSun, Podcast, Mic } from "lucide-react";
+import { Outlet, NavLink, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { Radio, Calendar, LayoutGrid, Music, Newspaper, CloudSun, Podcast, Mic, ArrowUp } from "lucide-react";
 import { getStats } from "../../api";
 import "./AdminLayout.css";
 
@@ -14,7 +14,10 @@ const NAV_ITEMS = [
 ];
 
 export default function AdminLayout() {
+  const mainRef = useRef(null);
+  const location = useLocation();
   const [stats, setStats] = useState(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
     return d.toISOString().slice(0, 10);
@@ -26,6 +29,43 @@ export default function AdminLayout() {
     const interval = setInterval(fetchStats, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const scrollToTop = () => {
+    mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    const el = mainRef.current;
+    const check = () => {
+      const mainCanScroll = el ? el.scrollHeight > el.clientHeight : false;
+      const mainScrolled = el ? el.scrollTop > 50 : false;
+      const docCanScroll = document.documentElement.scrollHeight > window.innerHeight;
+      const docScrolled = window.scrollY > 50;
+      const visible = (mainCanScroll && mainScrolled) || (docCanScroll && docScrolled);
+      setShowScrollTop(visible);
+    };
+
+    const runCheck = () => requestAnimationFrame(check);
+    runCheck();
+    setTimeout(runCheck, 100);
+    setTimeout(runCheck, 500);
+    setTimeout(runCheck, 1500);
+
+    el?.addEventListener("scroll", check);
+    window.addEventListener("scroll", check, { passive: true });
+
+    const ro = el ? new ResizeObserver(runCheck) : null;
+    el && ro?.observe(el);
+
+    const interval = setInterval(check, 1000);
+    return () => {
+      el?.removeEventListener("scroll", check);
+      window.removeEventListener("scroll", check);
+      ro?.disconnect();
+      clearInterval(interval);
+    };
+  }, [location.pathname]);
 
   return (
     <div className="admin-layout">
@@ -83,9 +123,30 @@ export default function AdminLayout() {
         })}
       </nav>
 
-      <main className="admin-main">
+      <main
+        ref={mainRef}
+        className="admin-main"
+        onScroll={() => {
+          const el = mainRef.current;
+          if (!el) return;
+          const canScroll = el.scrollHeight > el.clientHeight;
+          const scrolled = el.scrollTop > 50;
+          setShowScrollTop(canScroll && scrolled);
+        }}
+      >
         <Outlet context={{ selectedDate, setSelectedDate }} />
       </main>
+
+      {showScrollTop && (
+        <button
+          type="button"
+          className="scroll-to-top-btn"
+          onClick={scrollToTop}
+          aria-label="Наверх"
+        >
+          <ArrowUp size={22} />
+        </button>
+      )}
     </div>
   );
 }

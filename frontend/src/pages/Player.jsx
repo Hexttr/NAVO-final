@@ -3,7 +3,7 @@ import { Play, Square } from "lucide-react";
 import { getBroadcastPlaylistUrls } from "../api";
 import "./Player.css";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const EQ_BARS = 24;
 const BAR_COUNT = EQ_BARS;
 
