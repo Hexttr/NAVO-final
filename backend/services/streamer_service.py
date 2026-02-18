@@ -287,16 +287,19 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
         return
     chunk_size = 32 * 1024
     try:
+        # Реэнкод в единый формат — разные битрейты/сэмплрейты при concat могут вызывать
+        # обрыв потока у Icecast при переключении треков
         args = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-ss", str(total_seek),
             "-f", "concat", "-safe", "0", "-i", str(concat_path),
-            "-c", "copy", "-f", "mp3", "pipe:1",
+            "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+            "-f", "mp3", "pipe:1",
         ]
         proc = await asyncio.create_subprocess_exec(
             *args,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
         try:
             while True:
@@ -305,6 +308,10 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
                     break
                 yield chunk
         finally:
+            err = await proc.stderr.read()
+            if err:
+                import sys
+                print(f"[stream] FFmpeg: {err.decode(errors='replace')[:500]}", file=sys.stderr)
             await proc.wait()
     finally:
         try:
