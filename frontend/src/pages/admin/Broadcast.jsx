@@ -83,6 +83,12 @@ export default function Broadcast() {
     if (expandedId) lastViewIndexRef.current = null;
   }, [expandedId]);
 
+  const [minuteTick, setMinuteTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setMinuteTick((t) => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     const today = moscowDateStr();
     if (selectedDate !== today) {
@@ -93,9 +99,9 @@ export default function Broadcast() {
       getBroadcastNowPlaying(selectedDate).then(setNowPlaying).catch(() => {});
     };
     poll();
-    const id = setInterval(poll, 2000);
+    const id = setInterval(poll, 1000);
     return () => clearInterval(id);
-  }, [selectedDate]);
+  }, [selectedDate, minuteTick]);
 
   useEffect(() => {
     getTtsVoices().then((r) => {

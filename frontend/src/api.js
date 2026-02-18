@@ -270,7 +270,10 @@ export async function getBroadcastPlaylistUrls(date, sync = true) {
 }
 
 export async function getBroadcastNowPlaying(date) {
-  const r = await fetch(`${API}/broadcast/now-playing?d=${date}`);
+  const r = await fetch(`${API}/broadcast/now-playing?d=${date}&_=${Date.now()}`, {
+    cache: "no-store",
+    headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+  });
   return r.json();
 }
 
