@@ -7,6 +7,7 @@ from database import get_db
 from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
+from config import settings
 
 router = APIRouter(prefix="/broadcast", tags=["broadcast"])
 
@@ -30,6 +31,8 @@ def get_playlist_urls(
     """Плейлист для последовательного воспроизведения на фронте. Возвращает {items, startIndex}."""
     from datetime import datetime, timezone, timedelta
 
+    base = settings.base_url.rstrip("/") + "/api"
+
     items = (
         db.query(BroadcastItem)
         .filter(
@@ -39,7 +42,6 @@ def get_playlist_urls(
         .order_by(BroadcastItem.sort_order)
         .all()
     )
-    base = "http://localhost:8000/api"
     result = []
     for it in items:
         rec = {"url": "", "type": it.entity_type, "entity_id": it.entity_id}

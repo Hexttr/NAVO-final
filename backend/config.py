@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str | None = None
     database_url: str = "sqlite:///./navo.db"
     upload_dir: str = "uploads"
+    base_url: str = "https://navoradio.com"
 
     class Config:
         env_file = str(_env_path)
