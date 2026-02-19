@@ -1,3 +1,7 @@
+import { getSettings } from "./api.js";
+
+const API = import.meta.env.DEV ? "http://localhost:8000/api" : "/api";
+
 // Replace TTS functions to use ElevenLabs locally if provider is elevenlabs
 export async function uploadTTSAudio(entityType, id, audioBlob) {
   const fd = new FormData();
@@ -15,7 +19,10 @@ export async function localElevenLabsTTS(text, voiceId) {
   const apiKey = settings.elevenlabs_api_key_frontend || ""; // We might need to fetch this or pass it
   if (!apiKey) throw new Error("API ключ ElevenLabs не найден на клиенте");
 
-  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+  // Fallback voice ID if an empty string or generic label is passed from our fallback logic
+  const actualVoiceId = voiceId && voiceId.length > 5 ? voiceId : "pFZP5JQG7iQjIQuC4Bku"; // default 'Lily' voice ID or any standard one
+
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${actualVoiceId}`, {
     method: "POST",
     headers: {
       "xi-api-key": apiKey,

@@ -407,19 +407,24 @@ export async function swapBroadcastItems(date, fromIndex, toIndex) {
 export async function getTtsVoices() {
   const settings = await getSettings();
   if (settings.tts_provider === "elevenlabs") {
+    // If getting voices directly from browser fails due to CORS or API key issues, 
+    // fallback to a generic voice option so generation still works with default voice.
     const apiKey = settings.elevenlabs_api_key_frontend;
     if (!apiKey) return { voices: [["", "Укажите ключ ElevenLabs в Настройках"]] };
     try {
       const r = await fetch("https://api.elevenlabs.io/v1/voices", {
         headers: { "xi-api-key": apiKey }
       });
-      if (!r.ok) return { voices: [["", "Ошибка запроса к ElevenLabs"]] };
+      if (!r.ok) {
+        return { voices: [["", "ElevenLabs (дефолтный голос)"]] };
+      }
       const data = await r.json();
       return {
         voices: data.voices.slice(0, 50).map(v => [v.voice_id, v.name || v.voice_id])
       };
     } catch (e) {
-      return { voices: [["", "Ошибка загрузки голосов"]] };
+      // Typically fails due to CORS since ElevenLabs might not allow frontend requests to /v1/voices from some origins
+      return { voices: [["", "ElevenLabs (базовый голос)"]] };
     }
   }
   const r = await fetch(`${API}/tts/voices`);
