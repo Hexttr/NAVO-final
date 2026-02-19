@@ -111,73 +111,59 @@ export default function Settings() {
           <p className="settings-hint">
             Поисковые запросы для выборки музыки. Каждый тэг — отдельный запрос к API Jamendo.
           </p>
-          <div className="jamendo-tags-list">
+          <div className="jamendo-tags-compact">
             {(data.jamendo_tags || []).map((tag, idx) => (
-              <div key={idx} className="jamendo-tag-row">
+              <span key={idx} className="jamendo-tag-chip">
                 <input
                   type="text"
                   value={tag}
                   onChange={(e) => updateJamendoTag(idx, e.target.value)}
-                  placeholder="например: eastern music"
-                  className="jamendo-tag-input"
+                  className="jamendo-tag-chip-input"
                 />
-                <button
-                  type="button"
-                  className="jamendo-tag-remove"
-                  onClick={() => removeJamendoTag(idx)}
-                  aria-label="Удалить"
-                >
-                  <X size={14} />
+                <button type="button" className="jamendo-tag-chip-remove" onClick={() => removeJamendoTag(idx)} aria-label="Удалить">
+                  <X size={12} />
                 </button>
-              </div>
+              </span>
             ))}
-            <button type="button" className="jamendo-tag-add" onClick={addJamendoTag}>
-              <Plus size={14} /> Добавить тэг
+            <button type="button" className="jamendo-tag-chip-add" onClick={addJamendoTag}>
+              <Plus size={12} /> тэг
             </button>
           </div>
         </section>
 
-        {/* Weather region */}
-        <section className="settings-section">
-          <h3>Регион для погоды</h3>
-          <p className="settings-hint">
-            Город для прогноза погоды (WeatherAPI).
-          </p>
-          <div className="settings-select-row">
-            <select
-              value={data.weather_region || "dushanbe"}
-              onChange={(e) => setData((d) => ({ ...d, weather_region: e.target.value }))}
-              className="settings-select"
-            >
-              {(data.weather_region_options || []).map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </section>
-
-        {/* News region */}
-        <section className="settings-section">
-          <h3>Регион для новостей</h3>
-          <p className="settings-hint">
-            Набор RSS-источников: Таджикистан, Россия, Центральная Азия или смешанный.
-          </p>
-          <div className="settings-select-row">
-            <select
-              value={data.news_region || "tajikistan"}
-              onChange={(e) => setData((d) => ({ ...d, news_region: e.target.value }))}
-              className="settings-select"
-            >
-              {(data.news_region_options || []).map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </section>
+        {/* Weather + News regions — 2 columns */}
+        <div className="settings-regions-row">
+          <section className="settings-section">
+            <h3>Регион для погоды</h3>
+            <p className="settings-hint">Город для прогноза (WeatherAPI).</p>
+            <div className="settings-select-row">
+              <select
+                value={data.weather_region || "dushanbe"}
+                onChange={(e) => setData((d) => ({ ...d, weather_region: e.target.value }))}
+                className="settings-select"
+              >
+                {(data.weather_region_options || []).map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          </section>
+          <section className="settings-section">
+            <h3>Регион для новостей</h3>
+            <p className="settings-hint">Набор RSS-источников.</p>
+            <div className="settings-select-row">
+              <select
+                value={data.news_region || "tajikistan"}
+                onChange={(e) => setData((d) => ({ ...d, news_region: e.target.value }))}
+                className="settings-select"
+              >
+                {(data.news_region_options || []).map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          </section>
+        </div>
 
         {/* LLM provider */}
         <section className="settings-section">
@@ -209,8 +195,7 @@ export default function Settings() {
               <textarea
                 value={data.llm_prompt_dj || ""}
                 onChange={(e) => setData((d) => ({ ...d, llm_prompt_dj: e.target.value }))}
-                rows={6}
-                className="settings-textarea"
+                className="settings-textarea settings-textarea-tall"
                 placeholder="Промпт для DJ"
               />
             </div>
@@ -219,8 +204,7 @@ export default function Settings() {
               <textarea
                 value={data.llm_prompt_news || ""}
                 onChange={(e) => setData((d) => ({ ...d, llm_prompt_news: e.target.value }))}
-                rows={6}
-                className="settings-textarea"
+                className="settings-textarea settings-textarea-tall"
                 placeholder="Промпт для новостей"
               />
             </div>
@@ -229,8 +213,7 @@ export default function Settings() {
               <textarea
                 value={data.llm_prompt_weather || ""}
                 onChange={(e) => setData((d) => ({ ...d, llm_prompt_weather: e.target.value }))}
-                rows={6}
-                className="settings-textarea"
+                className="settings-textarea settings-textarea-tall"
                 placeholder="Промпт для погоды"
               />
             </div>
@@ -277,7 +260,7 @@ export default function Settings() {
               className="settings-number"
             />
           </div>
-          <div className="broadcast-slots-table">
+          <div className="broadcast-slots-grid">
             <div className="broadcast-slots-header">
               <span>Час</span>
               <span>Мин</span>
@@ -323,7 +306,7 @@ export default function Settings() {
                 </button>
               </div>
             ))}
-            <button type="button" className="broadcast-slot-add" onClick={addBroadcastSlot}>
+            <button type="button" className="broadcast-slot-add broadcast-slot-add-span" onClick={addBroadcastSlot}>
               <Plus size={14} /> Добавить слот
             </button>
           </div>
