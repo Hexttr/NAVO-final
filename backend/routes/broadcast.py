@@ -7,7 +7,7 @@ from database import get_db
 from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
-from services.streamer_service import get_entity_duration_from_file
+from services.streamer_service import get_entity_duration_from_file, get_playlist_with_times
 from services.hls_service import generate_hls, get_hls_url
 from config import settings
 
