@@ -37,18 +37,24 @@ def get_hls_path(broadcast_date: date, schedule_hash: str) -> Path:
 def generate_hls(db: Session, broadcast_date: date) -> dict:
     """
     Генерирует HLS для даты. Возвращает {ok, url, error, duration_sec}.
-    Запускается в фоне — может занять 2-5 мин для суток эфира.
+    Запускается в фоне — может занять 10-30 мин для суток эфира.
     """
+    import sys
+    _log = lambda msg: (print(f"[hls] {msg}", flush=True) or sys.stdout.flush())
+    _log(f"generate_hls start: {broadcast_date}")
+
     playlist = get_playlist_with_times(db, broadcast_date)
     if not playlist:
         return {"ok": False, "error": "Нет эфира на дату"}
 
     schedule_hash = get_broadcast_schedule_hash(db, broadcast_date)
     out_dir = get_hls_path(broadcast_date, schedule_hash)
+    _log(f"mkdir {out_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
     m3u8_path = out_dir / "stream.m3u8"
     segment_pattern = str(out_dir / "seg_%04d.ts")
 
+    _log(f"Creating concat for {len(playlist)} items (may take a few min)...")
     concat_path = _create_concat_file(playlist)
     if not concat_path or not concat_path.exists():
         return {"ok": False, "error": "Не удалось создать concat (нет файлов)"}
@@ -70,6 +76,7 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
     except OSError:
         pass
 
+    _log("Running ffmpeg (10-30 min for full day)...")
     try:
         r = subprocess.run(args, capture_output=True, timeout=3600, check=False)
         if r.returncode != 0:

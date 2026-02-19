@@ -459,8 +459,14 @@ def hls_status(
         return {"ok": False, "error": "Нет эфира на дату", "hasHls": False}
 
     schedule_hash = get_broadcast_schedule_hash(db, d)
-    m3u8_path = get_hls_path(d, schedule_hash) / "stream.m3u8"
     out_dir = get_hls_path(d, schedule_hash)
+    m3u8_path = out_dir / "stream.m3u8"
+    # Есть ли HLS с любым hash (расписание могло меняться)
+    date_dir = out_dir.parent
+    existing_hashes = []
+    if date_dir.exists():
+        existing_hashes = [p.name for p in date_dir.iterdir() if p.is_dir() and (p / "stream.m3u8").exists()]
+
     return {
         "ok": True,
         "hasHls": m3u8_path.exists(),
@@ -469,7 +475,24 @@ def hls_status(
         "m3u8_path": str(m3u8_path),
         "out_dir_exists": out_dir.exists(),
         "playlist_count": len(playlist),
+        "existing_hashes": existing_hashes,
     }
+
+
+@router.get("/hls-log")
+def get_hls_log(lines: int = Query(200, description="Last N lines")):
+    """Последние строки лога генерации HLS (для отладки)."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    log_path = project_root / "uploads" / "hls_generation.log"
+    if not log_path.exists():
+        return {"ok": True, "log": "(лог пуст или не создан)", "path": str(log_path)}
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+        last = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        return {"ok": True, "log": "".join(last), "path": str(log_path), "total_lines": len(all_lines)}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "path": str(log_path)}
 
 
 @router.post("/generate-hls")

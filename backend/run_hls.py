@@ -25,9 +25,12 @@ def main():
         print(f"Invalid date: {sys.argv[1]}", file=sys.stderr)
         sys.exit(1)
 
+    print(f"[run_hls] Start: {d}, cwd={os.getcwd()}", flush=True)
     db = SessionLocal()
     try:
+        print(f"[run_hls] Calling generate_hls...", flush=True)
         result = generate_hls(db, d)
+        print(f"[run_hls] Result: {result}", flush=True)
         if result.get("ok"):
             print(f"OK: {result.get('url')}")
             sys.exit(0)
