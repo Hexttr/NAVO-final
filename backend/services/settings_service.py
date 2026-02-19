@@ -39,11 +39,14 @@ DEFAULTS = {
 
 
 def get(db: Session, key: str) -> str:
-    """Get setting value. Returns default if not set."""
+    """Get setting value (always string). Returns default if not set."""
     row = db.query(Setting).filter(Setting.key == key).first()
     if row is not None:
-        return row.value
-    return DEFAULTS.get(key, "")
+        return row.value or ""
+    default = DEFAULTS.get(key, "")
+    if isinstance(default, (list, dict)):
+        return ""  # get_json will use DEFAULTS
+    return str(default) if default is not None else ""
 
 
 def get_json(db: Session, key: str):
