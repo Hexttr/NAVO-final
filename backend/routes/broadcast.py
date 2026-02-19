@@ -1,6 +1,11 @@
 import json
+import os
+import subprocess
+import sys
 from datetime import date
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
@@ -273,7 +278,6 @@ def recalc_all_durations(db: Session = Depends(get_db)):
 
 @router.post("/generate")
 def generate(
-    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
@@ -282,34 +286,43 @@ def generate(
         for item in items:
             db.add(item)
         db.commit()
-        # HLS в фоне (~2-5 мин)
-        def _run_hls():
-            from database import SessionLocal
-            session = SessionLocal()
-            try:
-                generate_hls(session, d)
-            finally:
-                session.close()
-        background_tasks.add_task(_run_hls)
-        return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~2-5 мин)."}
+        _spawn_hls_generation(d)
+        return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~10-30 мин)."}
     except ValueError as e:
         raise HTTPException(400, str(e))
 
 
-def _trigger_hls_background(background_tasks: BackgroundTasks, d: date):
-    def _run():
-        from database import SessionLocal
-        session = SessionLocal()
-        try:
-            generate_hls(session, d)
-        finally:
-            session.close()
-    background_tasks.add_task(_run)
+def _spawn_hls_generation(d: date) -> int | None:
+    """Запускает генерацию HLS в отдельном процессе. Возвращает PID или None при ошибке."""
+    try:
+        backend_dir = Path(__file__).resolve().parent.parent
+        project_root = backend_dir.parent
+        run_script = backend_dir / "run_hls.py"
+        log_path = project_root / "uploads" / "hls_generation.log"
+        if not run_script.exists():
+            return None
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_path, "a", encoding="utf-8")
+        log_file.write(f"\n=== HLS {d} (from schedule change) ===\n")
+        log_file.flush()
+        proc = subprocess.Popen(
+            [sys.executable, str(run_script), str(d)],
+            cwd=str(backend_dir),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env={**os.environ},
+            start_new_session=True,
+        )
+        log_file.write(f"PID: {proc.pid}\n")
+        log_file.flush()
+        log_file.close()
+        return proc.pid
+    except Exception:
+        return None
 
 
 @router.post("/swap")
 def swap_items(
-    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     from_index: int = Query(...),
     to_index: int = Query(...),
@@ -328,13 +341,12 @@ def swap_items(
         it.sort_order = i
     recalc_times(db, d, items)
     db.commit()
-    _trigger_hls_background(background_tasks, d)
+    _spawn_hls_generation(d)
     return {"ok": True}
 
 
 @router.delete("/items/{item_id}")
 def delete_item(
-    background_tasks: BackgroundTasks,
     item_id: int,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
@@ -353,13 +365,12 @@ def delete_item(
     items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
     recalc_times(db, d, items)
     db.commit()
-    _trigger_hls_background(background_tasks, d)
+    _spawn_hls_generation(d)
     return {"ok": True}
 
 
 @router.post("/items/{item_id}/insert")
 def insert_into_slot(
-    background_tasks: BackgroundTasks,
     item_id: int,
     body: InsertEntity,
     d: date = Query(..., description="Date YYYY-MM-DD"),
@@ -386,13 +397,12 @@ def insert_into_slot(
     items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
     recalc_times(db, d, items)
     db.commit()
-    _trigger_hls_background(background_tasks, d)
+    _spawn_hls_generation(d)
     return {"ok": True}
 
 
 @router.post("/move")
 def move_item(
-    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     from_index: int = Query(...),
     to_index: int = Query(...),
@@ -415,7 +425,7 @@ def move_item(
         it.sort_order = i
     recalc_times(db, d, items)
     db.commit()
-    _trigger_hls_background(background_tasks, d)
+    _spawn_hls_generation(d)
     return {"ok": True}
 
 
@@ -464,36 +474,44 @@ def hls_status(
 
 @router.post("/generate-hls")
 def trigger_generate_hls(
-    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """Запустить генерацию HLS в фоне. 2-5 мин для суток эфира."""
+    """Запустить генерацию HLS в отдельном процессе. 10-30 мин для суток эфира (857 треков)."""
     try:
         playlist = get_playlist_with_times(db, d)
         if not playlist:
             raise HTTPException(404, "Нет эфира на дату. Сгенерируйте сетку.")
 
-        def _run():
-            import logging
-            from database import SessionLocal
-            logger = logging.getLogger(__name__)
-            session = SessionLocal()
-            try:
-                result = generate_hls(session, d)
-                if result.get("ok"):
-                    logger.info("HLS generation OK: %s", result.get("url"))
-                else:
-                    logger.error("HLS generation failed: %s", result.get("error"))
-            except Exception as e:
-                import traceback
-                logger.exception("HLS generation exception: %s", e)
-                traceback.print_exc()
-            finally:
-                session.close()
+        backend_dir = Path(__file__).resolve().parent.parent
+        project_root = backend_dir.parent
+        python_exe = Path(sys.executable)
+        run_script = backend_dir / "run_hls.py"
+        log_path = project_root / "uploads" / "hls_generation.log"
 
-        background_tasks.add_task(_run)
-        return {"ok": True, "message": "Генерация HLS запущена в фоне (~2-5 мин). Обновите страницу."}
+        if not run_script.exists():
+            raise HTTPException(500, "run_hls.py не найден")
+
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_path, "a", encoding="utf-8")
+        log_file.write(f"\n=== HLS {d} started (PID will follow) ===\n")
+        log_file.flush()
+
+        proc = subprocess.Popen(
+            [str(python_exe), str(run_script), str(d)],
+            cwd=str(backend_dir),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env={**os.environ},
+            start_new_session=True,
+        )
+        log_file.write(f"PID: {proc.pid}\n")
+        log_file.flush()
+        log_file.close()
+        return {
+            "ok": True,
+            "message": f"Генерация HLS запущена (PID {proc.pid}). ~10-30 мин для {len(playlist)} треков. Лог: uploads/hls_generation.log",
+        }
     except HTTPException:
         raise
     except Exception as e:

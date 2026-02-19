@@ -453,14 +453,14 @@ export default function Broadcast() {
               try {
                 await generateHls(selectedDate);
                 // Генерация идёт в фоне ~2–5 мин. Показываем «Обновляю HLS» 5 мин.
-                setTimeout(() => setGeneratingHls(false), 5 * 60 * 1000);
+                setTimeout(() => setGeneratingHls(false), 30 * 60 * 1000);
               } catch (e) {
                 alert(e.message || "Ошибка");
                 setGeneratingHls(false);
               }
             }}
             disabled={loading || generatingHls || items.length === 0}
-            title="Обновить HLS после изменений расписания (~2-5 мин)"
+            title="Обновить HLS после изменений расписания (~10-30 мин для суток эфира)"
           >
             {generatingHls ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
             {generatingHls ? "Обновляю HLS" : "Обновить HLS"}
