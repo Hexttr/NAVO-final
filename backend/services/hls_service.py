@@ -60,11 +60,11 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
         return {"ok": False, "error": "Не удалось создать concat (нет файлов)"}
 
     bitrate = getattr(settings, "stream_bitrate", "256k") or "256k"
-    # libmp3lame — всегда доступен; AAC может отсутствовать в минимальных сборках
+    # libmp3lame может вызывать проблемы с hls.js (воспроизведение без звука), используем aac
     args = [
         "ffmpeg", "-y", "-loglevel", "warning",
         "-f", "concat", "-safe", "0", "-i", str(concat_path),
-        "-c:a", "libmp3lame", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
+        "-c:a", "aac", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
         "-f", "hls", "-hls_time", str(HLS_SEGMENT_DURATION),
         "-hls_playlist_type", "vod",
         "-hls_segment_filename", segment_pattern,
