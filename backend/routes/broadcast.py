@@ -517,7 +517,7 @@ def trigger_generate_hls(
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_file = open(log_path, "a", encoding="utf-8")
-        log_file.write(f"\n=== HLS {d} started (PID will follow) ===\n")
+        log_file.write(f"\n=== HLS {d} started [code: concat-fix] (PID will follow) ===\n")
         log_file.flush()
 
         proc = subprocess.Popen(
