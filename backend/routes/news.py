@@ -24,7 +24,7 @@ class NewsUpdate(BaseModel):
 
 
 @router.get("/rss-test")
-async def rss_test():
+async def rss_test(db: Session = Depends(get_db)):
     """Проверка: что возвращают RSS-источники. Для отладки."""
     from services.news_service import fetch_news_from_rss
     region = get(db, "news_region") or "tajikistan"
