@@ -201,7 +201,33 @@ def key_and_restart(ssh):
     return 0
 
 
+def nginx_only(client):
+    """Только обновить nginx config и reload."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(script_dir, "nginx-navoradio.conf"), "r", encoding="utf-8") as f:
+        nginx_conf = f.read()
+    sftp = client.open_sftp()
+    with sftp.file("/etc/nginx/sites-available/navoradio", "w") as remote:
+        remote.write(nginx_conf)
+    sftp.close()
+    run(client, "nginx -t")
+    run(client, "systemctl reload nginx")
+    print("Nginx обновлён и перезагружен")
+    return 0
+
+
 if __name__ == "__main__":
+    if "--nginx-only" in sys.argv:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(HOST, username=USER, password=PASSWORD, timeout=15)
+            sys.exit(nginx_only(client))
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            sys.exit(1)
+        finally:
+            client.close()
     if "--key-and-restart" in sys.argv:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
