@@ -9,6 +9,7 @@ from config import settings
 from pathlib import Path
 from services.news_service import fetch_news_from_rss
 from services.llm_service import generate_news_text
+from services.settings_service import get, NEWS_REGIONS
 from services.tts_service import text_to_speech
 
 router = APIRouter(prefix="/news", tags=["news"])
@@ -82,6 +83,8 @@ async def generate_news(
         text = await generate_news_text(db, news_texts)
     except ValueError as e:
         raise HTTPException(500, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка LLM: {str(e)[:200]}")
     n = News(text=text, broadcast_date=d)
     db.add(n)
     db.commit()
@@ -107,6 +110,8 @@ async def regenerate_news(
         text = await generate_news_text(db, news_texts)
     except ValueError as e:
         raise HTTPException(500, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка LLM: {str(e)[:200]}")
 
     if d is not None:
         # Создаём новую запись на дату d (не трогаем старую)

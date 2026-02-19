@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal
+from services.broadcast_service import recalc_broadcast_for_date
 from services.streamer_service import (
     get_playlist_with_times,
     stream_broadcast_async,
@@ -51,6 +52,13 @@ def main():
             db = SessionLocal()
             try:
                 today = moscow_date()
+                # Синхронизация длительностей на сегодня — эфир и админка используют одни тайминги
+                try:
+                    n = recalc_broadcast_for_date(db, today)
+                    if n > 0:
+                        print(f"[icecast] Пересчитано длительностей: {n} слотов")
+                except Exception as e:
+                    print(f"[icecast] recalc: {e}", file=sys.stderr)
                 playlist = get_playlist_with_times(db, today)
                 current_hash = get_broadcast_schedule_hash(db, today)
             finally:

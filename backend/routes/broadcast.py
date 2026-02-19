@@ -234,46 +234,11 @@ def delete_broadcast(
 @router.post("/recalc-durations")
 def recalc_all_durations(db: Session = Depends(get_db)):
     """Пересчитать длительность всех аудио из файлов (ffprobe). Обновляет сущности и BroadcastItem — точное совпадение админки и эфира."""
-    from models import Song, Podcast, Intro
-    from services.broadcast_service import get_entity_duration, recalc_times
+    from services.broadcast_service import recalc_all_durations as recalc_svc
 
-    updated = {"songs": 0, "podcasts": 0, "intros": 0, "broadcast_items": 0}
-    for s in db.query(Song).filter(Song.file_path != "").all():
-        dur = get_entity_duration_from_file(db, "song", s.id)
-        if dur > 0 and (not s.duration_seconds or abs(s.duration_seconds - dur) > 1):
-            s.duration_seconds = round(dur, 1)
-            updated["songs"] += 1
-    for p in db.query(Podcast).filter(Podcast.file_path != "").all():
-        dur = get_entity_duration_from_file(db, "podcast", p.id)
-        if dur > 0 and (not p.duration_seconds or abs(p.duration_seconds - dur) > 1):
-            p.duration_seconds = round(dur, 1)
-            updated["podcasts"] += 1
-    for i in db.query(Intro).filter(Intro.file_path != "").all():
-        dur = get_entity_duration_from_file(db, "intro", i.id)
-        if dur > 0 and (not i.duration_seconds or abs(i.duration_seconds - dur) > 1):
-            i.duration_seconds = round(dur, 1)
-            updated["intros"] += 1
-
-    # Обновить duration_seconds в BroadcastItem — админка и стрим используют одни и те же тайминги
-    for item in db.query(BroadcastItem).filter(BroadcastItem.entity_type != "empty").all():
-        try:
-            dur = get_entity_duration(db, item.entity_type, item.entity_id)
-            if dur > 0 and (not item.duration_seconds or abs(item.duration_seconds - dur) > 0.5):
-                item.duration_seconds = round(dur, 1)
-                updated["broadcast_items"] += 1
-        except ValueError:
-            pass
-    db.commit()
-
-    # Пересчитать start_time/end_time для всех дат
-    dates = {r[0] for r in db.query(BroadcastItem.broadcast_date).distinct().all()}
-    for d in dates:
-        items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
-        recalc_times(db, d, items)
-    db.commit()
-
+    updated = recalc_svc(db)
     total = sum(updated.values())
-    return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро, {updated['broadcast_items']} слотов эфира"}
+    return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро, {updated['news']} новостей, {updated['weather']} погод, {updated['broadcast_items']} слотов эфира"}
 
 
 @router.post("/generate")

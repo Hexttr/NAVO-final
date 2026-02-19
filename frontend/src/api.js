@@ -121,7 +121,18 @@ export async function createNews(text, broadcastDate) {
 export async function generateNews(broadcastDate) {
   const url = broadcastDate ? `${API}/news/generate?d=${broadcastDate}` : `${API}/news/generate`;
   const r = await fetch(url, { method: "POST" });
-  return r.json();
+  const text = await r.text();
+  if (!r.ok) {
+    try {
+      const data = JSON.parse(text);
+      const msg = Array.isArray(data.detail) ? data.detail[0]?.msg : (data.detail || data.message);
+      throw new Error(msg || "Ошибка генерации");
+    } catch (e) {
+      if (e instanceof SyntaxError) throw new Error(text.slice(0, 150) || "Ошибка генерации");
+      throw e;
+    }
+  }
+  return JSON.parse(text);
 }
 
 export async function regenerateNewsText(newsId, broadcastDate, broadcastItemId) {

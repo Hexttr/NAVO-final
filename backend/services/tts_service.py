@@ -22,8 +22,17 @@ async def list_voices(db: Session) -> list[tuple[str, str]]:
     return EDGE_VOICES.copy()
 
 
+def _get_elevenlabs_api_key() -> str:
+    """API key from settings or os.environ (fallback for correct loading)."""
+    key = getattr(settings, "elevenlabs_api_key", None) or ""
+    if not key:
+        import os
+        key = os.environ.get("ELEVENLABS_API_KEY", "")
+    return key or ""
+
+
 async def _list_elevenlabs_voices() -> list[tuple[str, str]]:
-    api_key = getattr(settings, "elevenlabs_api_key", None) or ""
+    api_key = _get_elevenlabs_api_key()
     if not api_key:
         return [("", "ElevenLabs: добавьте ELEVENLABS_API_KEY в .env")]
     try:
@@ -79,7 +88,7 @@ async def _tts_edge(
 
 
 async def _tts_elevenlabs(text: str, output_path: Path, voice_id: str) -> Path:
-    api_key = getattr(settings, "elevenlabs_api_key", None) or ""
+    api_key = _get_elevenlabs_api_key()
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY не задан в .env")
     if not voice_id:

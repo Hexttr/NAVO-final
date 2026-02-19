@@ -3,6 +3,7 @@ Broadcast schedule editing: recalc times, empty slots.
 Anchor events (news, weather, podcast, intro) keep fixed start_time.
 Fillers (song, dj, empty) get start_time from previous end_time.
 """
+from datetime import date
 from sqlalchemy.orm import Session
 from models import BroadcastItem, Song, News, Weather, Podcast, Intro
 from services.streamer_service import get_entity_duration_from_file
@@ -100,6 +101,81 @@ def get_entity_duration(db: Session, entity_type: str, entity_id: int) -> float:
                 db.commit()
         return dur if dur > 0 else 30.0
     raise ValueError(f"Unknown entity type: {entity_type}")
+
+
+def recalc_all_durations(db: Session) -> dict:
+    """
+    Пересчитать длительность всех аудио из файлов (ffprobe).
+    Обновляет сущности и BroadcastItem — синхронизация админки и эфира.
+    Вызывать при старте Icecast source и после замены файлов.
+    """
+    updated = {"songs": 0, "podcasts": 0, "intros": 0, "news": 0, "weather": 0, "broadcast_items": 0}
+    for s in db.query(Song).filter(Song.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "song", s.id)
+        if dur > 0 and (not s.duration_seconds or abs(s.duration_seconds - dur) > 1):
+            s.duration_seconds = round(dur, 1)
+            updated["songs"] += 1
+    for p in db.query(Podcast).filter(Podcast.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "podcast", p.id)
+        if dur > 0 and (not p.duration_seconds or abs(p.duration_seconds - dur) > 1):
+            p.duration_seconds = round(dur, 1)
+            updated["podcasts"] += 1
+    for i in db.query(Intro).filter(Intro.file_path != "").all():
+        dur = get_entity_duration_from_file(db, "intro", i.id)
+        if dur > 0 and (not i.duration_seconds or abs(i.duration_seconds - dur) > 1):
+            i.duration_seconds = round(dur, 1)
+            updated["intros"] += 1
+    for n in db.query(News).filter(News.audio_path != "").all():
+        dur = get_entity_duration_from_file(db, "news", n.id)
+        if dur > 0 and (not n.duration_seconds or abs(n.duration_seconds - dur) > 1):
+            n.duration_seconds = round(dur, 1)
+            updated["news"] += 1
+    for w in db.query(Weather).filter(Weather.audio_path != "").all():
+        dur = get_entity_duration_from_file(db, "weather", w.id)
+        if dur > 0 and (not w.duration_seconds or abs(w.duration_seconds - dur) > 1):
+            w.duration_seconds = round(dur, 1)
+            updated["weather"] += 1
+    for item in db.query(BroadcastItem).filter(BroadcastItem.entity_type != "empty").all():
+        try:
+            dur = get_entity_duration(db, item.entity_type, item.entity_id)
+            if dur > 0 and (not item.duration_seconds or abs(item.duration_seconds - dur) > 0.5):
+                item.duration_seconds = round(dur, 1)
+                updated["broadcast_items"] += 1
+        except ValueError:
+            pass
+    db.commit()
+    dates = {r[0] for r in db.query(BroadcastItem.broadcast_date).distinct().all()}
+    for d in dates:
+        items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
+        recalc_times(db, d, items)
+    db.commit()
+    return updated
+
+
+def recalc_broadcast_for_date(db: Session, broadcast_date: date) -> int:
+    """
+    Пересчитать duration_seconds только для BroadcastItem на указанную дату.
+    Использует реальные длительности из файлов (ffprobe) — синхрон с эфиром.
+    Вызывается при старте Icecast source.
+    """
+    items = db.query(BroadcastItem).filter(
+        BroadcastItem.broadcast_date == broadcast_date,
+        BroadcastItem.entity_type != "empty",
+    ).order_by(BroadcastItem.sort_order).all()
+    if not items:
+        return 0
+    count = 0
+    for item in items:
+        dur = get_entity_duration_from_file(db, item.entity_type, item.entity_id)
+        if dur <= 0 and item.entity_type == "dj":
+            dur = 45.0  # DJ fallback
+        if dur > 0 and (not item.duration_seconds or abs(item.duration_seconds - dur) > 0.5):
+            item.duration_seconds = round(dur, 1)
+            count += 1
+    if count > 0:
+        recalc_times(db, broadcast_date, items)
+        db.commit()
+    return count
 
 
 def get_entity_meta(db: Session, entity_type: str, entity_id: int) -> str:

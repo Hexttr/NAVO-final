@@ -53,26 +53,35 @@ async def _call_llm(db: Session, system_prompt: str, user_content: str) -> str:
 
 async def _call_openai(system_prompt: str, user_content: str) -> str:
     import httpx
-    api_key = getattr(config_settings, "openai_api_key", None) or ""
+    import os
+    api_key = getattr(config_settings, "openai_api_key", None) or os.environ.get("OPENAI_API_KEY", "") or ""
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY не задан в .env. Добавьте ключ для использования ChatGPT.")
-    async with httpx.AsyncClient() as client:
-        r = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                "temperature": 0.7,
-            },
-            timeout=60.0,
-        )
-        r.raise_for_status()
-        data = r.json()
-        return data["choices"][0]["message"]["content"].strip()
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": 0.7,
+                },
+                timeout=60.0,
+            )
+            r.raise_for_status()
+            data = r.json()
+            return data["choices"][0]["message"]["content"].strip()
+    except httpx.HTTPStatusError as e:
+        body = (e.response.text or "")[:300]
+        if e.response.status_code == 401:
+            raise RuntimeError("Неверный OPENAI_API_KEY. Проверьте ключ в .env")
+        raise RuntimeError(f"OpenAI API ошибка {e.response.status_code}: {body}")
+    except httpx.RequestError as e:
+        raise RuntimeError(f"Ошибка связи с OpenAI: {str(e)[:150]}")

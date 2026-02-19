@@ -60,12 +60,46 @@ def main(dry_run=False):
             if not dry_run:
                 run(client, f"cd {APP_DIR} && git fetch origin && (git checkout {BRANCH} 2>/dev/null || git checkout main) && git reset --hard origin/{BRANCH} 2>/dev/null || git reset --hard origin/main")
 
-        # 2. Проверка .env
+        # 2. Проверка .env и обновление ключей (если заданы NAVO_ELEVENLABS_API_KEY, NAVO_OPENAI_API_KEY)
         if not dry_run:
             out, _, code = run(client, f"test -f {APP_DIR}/.env", check=False)
             if code != 0:
                 print("ВНИМАНИЕ: .env не найден. Скопируйте .env.example в .env и заполните ключи.")
                 run(client, f"cp {APP_DIR}/.env.example {APP_DIR}/.env")
+            keys_to_set = {}
+            for env_key, line_key in [
+                ("NAVO_ELEVENLABS_API_KEY", "ELEVENLABS_API_KEY"),
+                ("NAVO_OPENAI_API_KEY", "OPENAI_API_KEY"),
+            ]:
+                val = os.environ.get(env_key, "").strip()
+                if val:
+                    keys_to_set[line_key] = val
+            if keys_to_set:
+                sftp = client.open_sftp()
+                with sftp.file(f"{APP_DIR}/.env", "r") as f:
+                    content = f.read().decode("utf-8", errors="replace")
+                lines = content.splitlines()
+                keys_found = set()
+                new_lines = []
+                for line in lines:
+                    replaced = False
+                    for k, v in keys_to_set.items():
+                        stripped = line.strip()
+                        if stripped == f"{k}=" or stripped.startswith(f"{k}=") or (stripped.startswith("#") and f"{k}=" in stripped):
+                            new_lines.append(f"{k}={v}")
+                            keys_found.add(k)
+                            replaced = True
+                            break
+                    if not replaced:
+                        new_lines.append(line)
+                for k, v in keys_to_set.items():
+                    if k not in keys_found:
+                        new_lines.append(f"{k}={v}")
+                with sftp.file(f"{APP_DIR}/.env", "w") as f:
+                    f.write("\n".join(new_lines) + "\n")
+                sftp.close()
+                for k in keys_to_set:
+                    print(f"Обновлён {k} в .env")
 
         # 3. Backend: venv + зависимости
         print(f"{prefix}Установка backend...")
