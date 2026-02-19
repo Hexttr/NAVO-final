@@ -451,12 +451,11 @@ export default function Broadcast() {
             onClick={async () => {
               setGeneratingHls(true);
               try {
-                const r = await generateHls(selectedDate);
-                alert(r.message || (r.ok ? "HLS генерируется" : r.error));
-                load();
+                await generateHls(selectedDate);
+                // Генерация идёт в фоне ~2–5 мин. Показываем «Обновляю HLS» 5 мин.
+                setTimeout(() => setGeneratingHls(false), 5 * 60 * 1000);
               } catch (e) {
                 alert(e.message || "Ошибка");
-              } finally {
                 setGeneratingHls(false);
               }
             }}
