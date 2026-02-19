@@ -36,7 +36,7 @@ async def _list_elevenlabs_voices() -> list[tuple[str, str]]:
     if not api_key:
         return [("", "ElevenLabs: добавьте ELEVENLABS_API_KEY в .env")]
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             r = await client.get(
                 "https://api.elevenlabs.io/v1/voices",
                 headers={"xi-api-key": api_key, "Content-Type": "application/json"},

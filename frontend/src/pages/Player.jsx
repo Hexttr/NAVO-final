@@ -47,14 +47,11 @@ export default function Player() {
           hlsRef.current = null;
         }
         audio.removeAttribute("src");
-        const hls = new Hls();
+        const startSec = moscowSecondsNow();
+        const hls = new Hls({ startPosition: startSec });
         hlsRef.current = hls;
         hls.loadSource(hlsUrl);
         hls.attachMedia(audio);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          const startSec = moscowSecondsNow();
-          audio.currentTime = Math.min(startSec, audio.duration || 86400);
-        });
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
             hls.destroy();
@@ -68,10 +65,13 @@ export default function Player() {
       } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
         audio.src = hlsUrl;
         const seekToMoscow = () => {
-          const startSec = moscowSecondsNow();
-          audio.currentTime = Math.min(startSec, audio.duration || 86400);
+          if (audio.duration && isFinite(audio.duration)) {
+            const startSec = moscowSecondsNow();
+            audio.currentTime = Math.min(startSec, audio.duration);
+          }
         };
         audio.addEventListener("loadedmetadata", seekToMoscow, { once: true });
+        audio.addEventListener("canplay", seekToMoscow, { once: true });
         audio.play().catch((e) => {
           setError("Не удалось воспроизвести.");
           setLoading(false);
@@ -97,9 +97,22 @@ export default function Player() {
     });
   };
 
+  const unlockAudioContext = () => {
+    const ctx = audioContextRef.current;
+    if (ctx?.state === "suspended") ctx.resume();
+    else if (!ctx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        audioContextRef.current = new Ctx();
+        audioContextRef.current.resume();
+      }
+    }
+  };
+
   const togglePlay = () => {
     setError(null);
     retryCountRef.current = 0;
+    unlockAudioContext();
     if (playing) {
       if (hlsRef.current) {
         hlsRef.current.destroy();
