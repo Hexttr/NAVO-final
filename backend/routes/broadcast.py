@@ -296,8 +296,20 @@ def generate(
         raise HTTPException(400, str(e))
 
 
+def _trigger_hls_background(background_tasks: BackgroundTasks, d: date):
+    def _run():
+        from database import SessionLocal
+        session = SessionLocal()
+        try:
+            generate_hls(session, d)
+        finally:
+            session.close()
+    background_tasks.add_task(_run)
+
+
 @router.post("/swap")
 def swap_items(
+    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     from_index: int = Query(...),
     to_index: int = Query(...),
@@ -316,11 +328,13 @@ def swap_items(
         it.sort_order = i
     recalc_times(db, d, items)
     db.commit()
+    _trigger_hls_background(background_tasks, d)
     return {"ok": True}
 
 
 @router.delete("/items/{item_id}")
 def delete_item(
+    background_tasks: BackgroundTasks,
     item_id: int,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
@@ -339,11 +353,13 @@ def delete_item(
     items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
     recalc_times(db, d, items)
     db.commit()
+    _trigger_hls_background(background_tasks, d)
     return {"ok": True}
 
 
 @router.post("/items/{item_id}/insert")
 def insert_into_slot(
+    background_tasks: BackgroundTasks,
     item_id: int,
     body: InsertEntity,
     d: date = Query(..., description="Date YYYY-MM-DD"),
@@ -370,11 +386,13 @@ def insert_into_slot(
     items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
     recalc_times(db, d, items)
     db.commit()
+    _trigger_hls_background(background_tasks, d)
     return {"ok": True}
 
 
 @router.post("/move")
 def move_item(
+    background_tasks: BackgroundTasks,
     d: date = Query(..., description="Date YYYY-MM-DD"),
     from_index: int = Query(...),
     to_index: int = Query(...),
@@ -397,6 +415,7 @@ def move_item(
         it.sort_order = i
     recalc_times(db, d, items)
     db.commit()
+    _trigger_hls_background(background_tasks, d)
     return {"ok": True}
 
 

@@ -118,6 +118,7 @@ export default function Player() {
   const handleAudioError = () => {
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1;
+      setError(`Переподключение... (${retryCountRef.current}/${MAX_RETRIES})`);
       setTimeout(() => playStream(), RETRY_DELAY_MS);
     } else {
       setError("Ошибка загрузки. Проверьте эфир в админке.");
@@ -249,6 +250,7 @@ export default function Player() {
         onPlay={() => {
           setPlaying(true);
           setLoading(false);
+          setError(null);
           retryCountRef.current = 0;
         }}
         onPause={() => setPlaying(false)}
