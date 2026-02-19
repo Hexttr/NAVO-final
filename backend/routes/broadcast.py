@@ -435,6 +435,33 @@ def hls_url(
     return {"url": url, "hasHls": url is not None}
 
 
+@router.get("/hls-status")
+def hls_status(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Отладка: статус HLS, путь, наличие файлов."""
+    from services.streamer_service import get_broadcast_schedule_hash
+    from services.hls_service import get_hls_path
+
+    playlist = get_playlist_with_times(db, d)
+    if not playlist:
+        return {"ok": False, "error": "Нет эфира на дату", "hasHls": False}
+
+    schedule_hash = get_broadcast_schedule_hash(db, d)
+    m3u8_path = get_hls_path(d, schedule_hash) / "stream.m3u8"
+    out_dir = get_hls_path(d, schedule_hash)
+    return {
+        "ok": True,
+        "hasHls": m3u8_path.exists(),
+        "url": f"/hls/{d}/{schedule_hash}/stream.m3u8" if m3u8_path.exists() else None,
+        "schedule_hash": schedule_hash,
+        "m3u8_path": str(m3u8_path),
+        "out_dir_exists": out_dir.exists(),
+        "playlist_count": len(playlist),
+    }
+
+
 @router.post("/generate-hls")
 def trigger_generate_hls(
     background_tasks: BackgroundTasks,
@@ -448,12 +475,19 @@ def trigger_generate_hls(
             raise HTTPException(404, "Нет эфира на дату. Сгенерируйте сетку.")
 
         def _run():
+            import logging
             from database import SessionLocal
+            logger = logging.getLogger(__name__)
             session = SessionLocal()
             try:
-                generate_hls(session, d)
+                result = generate_hls(session, d)
+                if result.get("ok"):
+                    logger.info("HLS generation OK: %s", result.get("url"))
+                else:
+                    logger.error("HLS generation failed: %s", result.get("error"))
             except Exception as e:
                 import traceback
+                logger.exception("HLS generation exception: %s", e)
                 traceback.print_exc()
             finally:
                 session.close()
