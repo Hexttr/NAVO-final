@@ -464,7 +464,7 @@ export default function Broadcast() {
             title="Обновить HLS после изменений расписания (~2-5 мин)"
           >
             {generatingHls ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
-            {generatingHls ? "…" : "Обновить HLS"}
+            {generatingHls ? "Обновляю HLS" : "Обновить HLS"}
           </button>
         </div>
         <div className="broadcast-actions-count">

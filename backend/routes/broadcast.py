@@ -442,20 +442,28 @@ def trigger_generate_hls(
     db: Session = Depends(get_db),
 ):
     """Запустить генерацию HLS в фоне. 2-5 мин для суток эфира."""
-    playlist = get_playlist_with_times(db, d)
-    if not playlist:
-        raise HTTPException(404, "Нет эфира на дату. Сгенерируйте сетку.")
+    try:
+        playlist = get_playlist_with_times(db, d)
+        if not playlist:
+            raise HTTPException(404, "Нет эфира на дату. Сгенерируйте сетку.")
 
-    def _run():
-        from database import SessionLocal
-        session = SessionLocal()
-        try:
-            generate_hls(session, d)
-        finally:
-            session.close()
+        def _run():
+            from database import SessionLocal
+            session = SessionLocal()
+            try:
+                generate_hls(session, d)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+            finally:
+                session.close()
 
-    background_tasks.add_task(_run)
-    return {"ok": True, "message": "Генерация HLS запущена в фоне (~2-5 мин). Обновите страницу."}
+        background_tasks.add_task(_run)
+        return {"ok": True, "message": "Генерация HLS запущена в фоне (~2-5 мин). Обновите страницу."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @router.get("/debug-concat")

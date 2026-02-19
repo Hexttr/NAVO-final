@@ -277,7 +277,15 @@ export async function getHlsUrl(date) {
 
 export async function generateHls(date) {
   const r = await fetch(`${API}/broadcast/generate-hls?d=${date}`, { method: "POST" });
-  return r.json();
+  const text = await r.text();
+  try {
+    const data = JSON.parse(text);
+    if (!r.ok) throw new Error(data.detail || data.error || "Ошибка");
+    return data;
+  } catch (e) {
+    if (e instanceof SyntaxError) throw new Error(r.status === 500 ? "Ошибка сервера" : text || "Ошибка");
+    throw e;
+  }
 }
 
 export async function getBroadcastNowPlaying(date) {
