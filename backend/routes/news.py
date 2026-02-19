@@ -27,7 +27,9 @@ class NewsUpdate(BaseModel):
 async def rss_test():
     """Проверка: что возвращают RSS-источники. Для отладки."""
     from services.news_service import fetch_news_from_rss
-    items = await fetch_news_from_rss(limit=10)
+    region = get(db, "news_region") or "tajikistan"
+    rss_urls = NEWS_REGIONS.get(region, NEWS_REGIONS["tajikistan"])
+    items = await fetch_news_from_rss(limit=10, rss_urls=rss_urls)
     return {"count": len(items), "items": [{"title": x["title"], "summary": (x["summary"] or "")[:100]} for x in items]}
 
 
@@ -70,7 +72,9 @@ async def generate_news(
     d: date | None = Query(None, description="Дата для новой записи YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    items = await fetch_news_from_rss(limit=15)
+    region = get(db, "news_region") or "tajikistan"
+    rss_urls = NEWS_REGIONS.get(region, NEWS_REGIONS["tajikistan"])
+    items = await fetch_news_from_rss(limit=15, rss_urls=rss_urls)
     if not items:
         raise HTTPException(500, "Не удалось получить новости из RSS. Проверьте доступность источников.")
     news_texts = [f"{x['title']}. {x['summary']}" for x in items]
@@ -93,7 +97,9 @@ async def regenerate_news(
     db: Session = Depends(get_db),
 ):
     """Перегенерировать: создаёт НОВУЮ запись на дату d, обновляет слот. Иначе — перезаписывает текущую."""
-    items = await fetch_news_from_rss(limit=10)
+    region = get(db, "news_region") or "tajikistan"
+    rss_urls = NEWS_REGIONS.get(region, NEWS_REGIONS["tajikistan"])
+    items = await fetch_news_from_rss(limit=10, rss_urls=rss_urls)
     if not items:
         raise HTTPException(500, "Не удалось получить новости из RSS. Проверьте доступность источников.")
     news_texts = [f"{x['title']}. {x['summary']}" for x in items]

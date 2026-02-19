@@ -137,6 +137,48 @@ export default function Settings() {
           </div>
         </section>
 
+        {/* Weather region */}
+        <section className="settings-section">
+          <h3>Регион для погоды</h3>
+          <p className="settings-hint">
+            Город для прогноза погоды (WeatherAPI).
+          </p>
+          <div className="settings-select-row">
+            <select
+              value={data.weather_region || "dushanbe"}
+              onChange={(e) => setData((d) => ({ ...d, weather_region: e.target.value }))}
+              className="settings-select"
+            >
+              {(data.weather_region_options || []).map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        {/* News region */}
+        <section className="settings-section">
+          <h3>Регион для новостей</h3>
+          <p className="settings-hint">
+            Набор RSS-источников: Таджикистан, Россия, Центральная Азия или смешанный.
+          </p>
+          <div className="settings-select-row">
+            <select
+              value={data.news_region || "tajikistan"}
+              onChange={(e) => setData((d) => ({ ...d, news_region: e.target.value }))}
+              className="settings-select"
+            >
+              {(data.news_region_options || []).map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+
         {/* LLM provider */}
         <section className="settings-section">
           <h3>Модель для генерации текстов</h3>

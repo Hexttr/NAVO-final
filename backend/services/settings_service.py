@@ -35,6 +35,49 @@ DEFAULTS = {
         [21, 0, "news"], [22, 0, "weather"], [23, 0, "podcast"],
     ],
     "broadcast_intro_minute": 55,
+    "weather_region": "dushanbe",
+    "news_region": "tajikistan",
+}
+
+WEATHER_REGIONS = {
+    "dushanbe": ("Душанбе", "Dushanbe"),
+    "moscow": ("Москва", "Moscow"),
+    "spb": ("Санкт-Петербург", "Saint Petersburg"),
+    "almaty": ("Алматы", "Almaty"),
+    "tashkent": ("Ташкент", "Tashkent"),
+    "bishkek": ("Бишкек", "Bishkek"),
+    "ashgabat": ("Ашхабад", "Ashgabat"),
+}
+
+NEWS_REGIONS = {
+    "tajikistan": [
+        "https://pressa.tj/ru/feed/",
+        "https://asiaplustj.info/ru/rss",
+        "https://feeds.tajikistannews.net/rss/929bcf2071e81801",
+        "https://eurasianet.org/region/tajikistan/feed",
+        "https://lenta.ru/rss",
+        "https://ria.ru/export/rss2/index.xml",
+    ],
+    "russia": [
+        "https://lenta.ru/rss",
+        "https://ria.ru/export/rss2/index.xml",
+        "https://tass.ru/rss/v2.xml",
+        "https://www.interfax.ru/rss.asp",
+    ],
+    "central_asia": [
+        "https://eurasianet.org/region/tajikistan/feed",
+        "https://eurasianet.org/region/kyrgyzstan/feed",
+        "https://eurasianet.org/region/uzbekistan/feed",
+        "https://eurasianet.org/region/kazakhstan/feed",
+        "https://lenta.ru/rss",
+    ],
+    "mixed": [
+        "https://pressa.tj/ru/feed/",
+        "https://asiaplustj.info/ru/rss",
+        "https://eurasianet.org/region/tajikistan/feed",
+        "https://lenta.ru/rss",
+        "https://ria.ru/export/rss2/index.xml",
+    ],
 }
 
 
@@ -84,6 +127,13 @@ def get_all(db: Session) -> dict:
             result[key] = get_json(db, key)
         else:
             result[key] = get(db, key) or default
+    result["weather_region_options"] = [{"value": k, "label": v[0]} for k, v in WEATHER_REGIONS.items()]
+    result["news_region_options"] = [
+        {"value": "tajikistan", "label": "Таджикистан"},
+        {"value": "russia", "label": "Россия"},
+        {"value": "central_asia", "label": "Центральная Азия"},
+        {"value": "mixed", "label": "Смешанный"},
+    ]
     return result
 
 

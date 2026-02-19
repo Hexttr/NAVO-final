@@ -1,20 +1,16 @@
 import httpx
 from config import settings
 
-# WeatherAPI.com - Dushanbe coordinates
-DUSHANBE_LAT = 38.5598
-DUSHANBE_LON = 68.7739
 
-
-async def fetch_weather_forecast() -> str:
-    """Fetch weather for Dushanbe, return formatted text for Groq."""
+async def fetch_weather_forecast(city: str = "Dushanbe") -> str:
+    """Fetch weather for city. city: name for WeatherAPI (Dushanbe, Moscow, etc.)."""
     url = "https://api.weatherapi.com/v1/forecast.json"
     async with httpx.AsyncClient() as client:
         r = await client.get(
             url,
             params={
                 "key": settings.weather_api_key,
-                "q": f"{DUSHANBE_LAT},{DUSHANBE_LON}",
+                "q": city,
                 "days": 7,
                 "lang": "ru",
             },

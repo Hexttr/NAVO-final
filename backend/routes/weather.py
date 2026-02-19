@@ -9,6 +9,7 @@ from models import Weather, BroadcastItem
 from config import settings
 from pathlib import Path
 from services.weather_service import fetch_weather_forecast
+from services.settings_service import get, WEATHER_REGIONS
 from services.llm_service import generate_weather_text
 from services.tts_service import text_to_speech
 
@@ -60,7 +61,9 @@ async def generate_weather(
     d: date | None = Query(None, description="Дата для новой записи YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    raw = await fetch_weather_forecast()
+    region = get(db, "weather_region") or "dushanbe"
+    city = WEATHER_REGIONS.get(region, ("Душанбе", "Dushanbe"))[1]
+    raw = await fetch_weather_forecast(city)
     text = await generate_weather_text(db, raw)
     w = Weather(text=text, broadcast_date=d)
     db.add(w)
@@ -77,7 +80,9 @@ async def regenerate_weather(
     db: Session = Depends(get_db),
 ):
     """Перегенерировать: создаёт НОВУЮ запись на дату d, обновляет слот. Иначе — перезаписывает текущую."""
-    raw = await fetch_weather_forecast()
+    region = get(db, "weather_region") or "dushanbe"
+    city = WEATHER_REGIONS.get(region, ("Душанбе", "Dushanbe"))[1]
+    raw = await fetch_weather_forecast(city)
     text = await generate_weather_text(db, raw)
 
     if d is not None:

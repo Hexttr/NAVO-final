@@ -2,11 +2,9 @@ import feedparser
 import httpx
 from datetime import datetime
 
-# RSS sources: Таджикистан + общие русскоязычные (fallback)
-NEWS_RSS_SOURCES = [
+DEFAULT_RSS_SOURCES = [
     "https://pressa.tj/ru/feed/",
     "https://asiaplustj.info/ru/rss",
-    "https://asiaplustj.info/en/rss",
     "https://feeds.tajikistannews.net/rss/929bcf2071e81801",
     "https://eurasianet.org/region/tajikistan/feed",
     "https://lenta.ru/rss",
@@ -14,12 +12,13 @@ NEWS_RSS_SOURCES = [
 ]
 
 
-async def fetch_news_from_rss(limit: int = 15) -> list[dict]:
+async def fetch_news_from_rss(limit: int = 15, rss_urls: list[str] | None = None) -> list[dict]:
     """Fetch news from RSS feeds. Returns list of {title, link, summary, source}."""
+    urls = rss_urls or DEFAULT_RSS_SOURCES
     all_news = []
     seen_titles = set()
 
-    for url in NEWS_RSS_SOURCES:
+    for url in urls:
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.get(url, timeout=15.0)
