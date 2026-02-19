@@ -71,11 +71,6 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
         str(m3u8_path),
     ]
 
-    try:
-        concat_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
     _log("Running ffmpeg (10-30 min for full day)...")
     try:
         r = subprocess.run(args, capture_output=True, timeout=3600, check=False)
@@ -86,6 +81,11 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
         return {"ok": False, "error": "Таймаут генерации (>1ч)"}
     except FileNotFoundError:
         return {"ok": False, "error": "FFmpeg не найден"}
+    finally:
+        try:
+            concat_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     if not m3u8_path.exists():
         return {"ok": False, "error": "m3u8 не создан"}
