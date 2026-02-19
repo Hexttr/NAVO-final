@@ -224,7 +224,7 @@ export default function Settings() {
         <section className="settings-section">
           <h3>Озвучка (TTS)</h3>
           <p className="settings-hint">
-            Edge TTS бесплатный. ElevenLabs — платный, выше качество. Ключ ELEVENLABS_API_KEY в .env.
+            Edge TTS бесплатный. ElevenLabs — платный, выше качество. Ключ ELEVENLABS_API_KEY в .env на сервере, а также нужно указать клиентский ключ для озвучки в админке.
           </p>
           <div className="settings-select-row">
             <select
@@ -236,6 +236,21 @@ export default function Settings() {
               <option value="elevenlabs">ElevenLabs</option>
             </select>
           </div>
+          {data.tts_provider === "elevenlabs" && (
+            <div style={{ marginTop: "10px" }}>
+              <label>API ключ ElevenLabs для Frontend:</label>
+              <input
+                type="text"
+                value={data.elevenlabs_api_key_frontend || ""}
+                onChange={(e) => setData((d) => ({ ...d, elevenlabs_api_key_frontend: e.target.value }))}
+                className="settings-textarea"
+                placeholder="sk_..."
+              />
+              <p className="settings-hint" style={{ marginTop: "5px" }}>
+                Этот ключ будет использоваться напрямую в браузере для генерации озвучки.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Broadcast template */}

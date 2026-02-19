@@ -1,5 +1,6 @@
+import uuid
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -34,6 +35,14 @@ def list_weather(
     if d is not None:
         q = q.filter(or_(Weather.broadcast_date == d, Weather.broadcast_date.is_(None)))
     return q.all()
+
+
+@router.get("/{weather_id}")
+def get_weather(weather_id: int, db: Session = Depends(get_db)):
+    w = db.query(Weather).get(weather_id)
+    if not w:
+        raise HTTPException(404, "Weather not found")
+    return w
 
 
 @router.get("/{weather_id}/audio")
@@ -117,8 +126,22 @@ async def generate_weather_audio(weather_id: int, voice: str = "ru-RU-DmitryNeur
         raise HTTPException(400, "Weather or text not found")
     audio_dir = Path(settings.upload_dir) / "weather"
     audio_dir.mkdir(parents=True, exist_ok=True)
-    path = audio_dir / f"weather_{weather_id}.mp3"
+    path = audio_dir / f"weather_{weather_id}_{uuid.uuid4().hex}.mp3"
     await text_to_speech(w.text, path, voice, db=db)
+    w.audio_path = str(path)
+    db.commit()
+    return {"audio_path": w.audio_path}
+
+
+@router.post("/{weather_id}/upload-tts")
+async def upload_weather_tts(weather_id: int, file: UploadFile, db: Session = Depends(get_db)):
+    w = db.query(Weather).get(weather_id)
+    if not w:
+        raise HTTPException(404, "Weather not found")
+    audio_dir = Path(settings.upload_dir) / "weather"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    path = audio_dir / f"weather_{weather_id}_{uuid.uuid4().hex}.mp3"
+    path.write_bytes(await file.read())
     w.audio_path = str(path)
     db.commit()
     return {"audio_path": w.audio_path}

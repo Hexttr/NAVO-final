@@ -35,19 +35,11 @@ async def _list_elevenlabs_voices() -> list[tuple[str, str]]:
     api_key = _get_elevenlabs_api_key()
     if not api_key:
         return [("", "ElevenLabs: добавьте ELEVENLABS_API_KEY в .env")]
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            r = await client.get(
-                "https://api.elevenlabs.io/v1/voices",
-                headers={"xi-api-key": api_key, "Content-Type": "application/json"},
-                timeout=10,
-            )
-            r.raise_for_status()
-            data = r.json()
-            voices = data.get("voices", [])
-            return [(v["voice_id"], v.get("name", v["voice_id"])) for v in voices[:50]]
-    except Exception as e:
-        return [("", f"ElevenLabs: {str(e)[:80]}")]
+    # If using proxy or running directly from client is not an option right now, we can hardcode 
+    # some known ElevenLabs voices, or return an empty list letting the user type the voice ID.
+    # But wait, the prompt asks: "Давай используем 2. Это админка." (Move to frontend).
+    # Since we need to move TTS to frontend, we should modify `generate_dj_audio`, `generateNewsTts`, etc.
+    return [("", "ElevenLabs: генерация перенесена на клиент")]
 
 
 async def text_to_speech(

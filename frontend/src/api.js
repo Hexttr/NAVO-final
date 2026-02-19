@@ -16,6 +16,12 @@ export async function getSongs() {
   return r.json();
 }
 
+export async function getSong(songId) {
+  const r = await fetch(`${API}/songs/${songId}`);
+  if (!r.ok) throw new Error("Песня не найдена");
+  return r.json();
+}
+
 export function getSongAudioUrl(songId) {
   return `${API.replace("/api", "")}/api/songs/${songId}/audio`;
 }
@@ -85,7 +91,19 @@ export async function generateDjBatch(songIds) {
 }
 
 export async function generateDjTts(songId, voice = "ru-RU-DmitryNeural") {
+  const settings = await getSettings();
+  if (settings.tts_provider === "elevenlabs") {
+    const r = await fetch(`${API}/songs/${songId}`);
+    const item = await r.json();
+    const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
+    const blob = await localElevenLabsTTS(item.dj_text, voice);
+    return uploadTTSAudio("songs", songId, blob);
+  }
   const r = await fetch(`${API}/songs/${songId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || "Ошибка TTS");
+  }
   return r.json();
 }
 
@@ -148,7 +166,20 @@ export async function regenerateNewsText(newsId, broadcastDate, broadcastItemId)
 }
 
 export async function generateNewsTts(newsId, voice = "ru-RU-DmitryNeural") {
+  const settings = await getSettings();
+  if (settings.tts_provider === "elevenlabs") {
+    // Generate locally and upload
+    const r = await fetch(`${API}/news/${newsId}`);
+    const item = await r.json();
+    const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
+    const blob = await localElevenLabsTTS(item.text, voice);
+    return uploadTTSAudio("news", newsId, blob);
+  }
   const r = await fetch(`${API}/news/${newsId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || "Ошибка TTS");
+  }
   return r.json();
 }
 
@@ -204,7 +235,19 @@ export async function regenerateWeatherText(weatherId, broadcastDate, broadcastI
 }
 
 export async function generateWeatherTts(weatherId, voice = "ru-RU-DmitryNeural") {
+  const settings = await getSettings();
+  if (settings.tts_provider === "elevenlabs") {
+    const r = await fetch(`${API}/weather/${weatherId}`);
+    const item = await r.json();
+    const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
+    const blob = await localElevenLabsTTS(item.text, voice);
+    return uploadTTSAudio("weather", weatherId, blob);
+  }
   const r = await fetch(`${API}/weather/${weatherId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || "Ошибка TTS");
+  }
   return r.json();
 }
 
@@ -362,6 +405,23 @@ export async function swapBroadcastItems(date, fromIndex, toIndex) {
 }
 
 export async function getTtsVoices() {
+  const settings = await getSettings();
+  if (settings.tts_provider === "elevenlabs") {
+    const apiKey = settings.elevenlabs_api_key_frontend;
+    if (!apiKey) return { voices: [["", "Укажите ключ ElevenLabs в Настройках"]] };
+    try {
+      const r = await fetch("https://api.elevenlabs.io/v1/voices", {
+        headers: { "xi-api-key": apiKey }
+      });
+      if (!r.ok) return { voices: [["", "Ошибка запроса к ElevenLabs"]] };
+      const data = await r.json();
+      return {
+        voices: data.voices.slice(0, 50).map(v => [v.voice_id, v.name || v.voice_id])
+      };
+    } catch (e) {
+      return { voices: [["", "Ошибка загрузки голосов"]] };
+    }
+  }
   const r = await fetch(`${API}/tts/voices`);
   return r.json();
 }

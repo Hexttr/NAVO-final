@@ -2,13 +2,14 @@ import asyncio
 import json
 import random
 import uuid
+import shutil
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
-from models import Song
+from models import Song, News, Weather
 from config import settings
 from services.jamendo import JamendoService, search_tracks, download_track
 from services.llm_service import generate_dj_text
@@ -19,12 +20,10 @@ router = APIRouter(prefix="/songs", tags=["songs"])
 UPLOAD_DIR = Path(settings.upload_dir) / "songs"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-
 class SongCreate(BaseModel):
     title: str
     artist: str
     album: str = ""
-
 
 class SongUpdate(BaseModel):
     title: str | None = None
@@ -32,11 +31,16 @@ class SongUpdate(BaseModel):
     album: str | None = None
     dj_text: str | None = None
 
-
 @router.get("")
 def list_songs(db: Session = Depends(get_db)):
     return db.query(Song).order_by(Song.id.desc()).all()
 
+@router.get("/{song_id}")
+def get_song(song_id: int, db: Session = Depends(get_db)):
+    song = db.query(Song).get(song_id)
+    if not song:
+        raise HTTPException(404, "Song not found")
+    return song
 
 @router.get("/{song_id}/audio")
 def get_song_audio(song_id: int, db: Session = Depends(get_db)):
@@ -50,7 +54,6 @@ def get_song_audio(song_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "File not found")
     return FileResponse(path, media_type="audio/mpeg")
 
-
 @router.get("/{song_id}/dj-audio")
 def get_song_dj_audio(song_id: int, db: Session = Depends(get_db)):
     song = db.query(Song).get(song_id)
@@ -61,16 +64,13 @@ def get_song_dj_audio(song_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "File not found")
     return FileResponse(path, media_type="audio/mpeg")
 
-
 @router.post("")
 async def create_song(data: SongCreate, db: Session = Depends(get_db)):
-    # Manual create - need file via separate upload
     song = Song(title=data.title, artist=data.artist, album=data.album, file_path="")
     db.add(song)
     db.commit()
     db.refresh(song)
     return song
-
 
 @router.post("/upload/{song_id}")
 async def upload_song_file(song_id: int, file: UploadFile, db: Session = Depends(get_db)):
@@ -86,6 +86,18 @@ async def upload_song_file(song_id: int, file: UploadFile, db: Session = Depends
     db.commit()
     return {"file_path": song.file_path}
 
+@router.post("/{song_id}/upload-tts")
+async def upload_song_tts(song_id: int, file: UploadFile, db: Session = Depends(get_db)):
+    song = db.query(Song).get(song_id)
+    if not song:
+        raise HTTPException(404, "Song not found")
+    audio_dir = Path(settings.upload_dir) / "dj"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    path = audio_dir / f"dj_{song_id}_{uuid.uuid4().hex}.mp3"
+    path.write_bytes(await file.read())
+    song.dj_audio_path = str(path)
+    db.commit()
+    return {"audio_path": song.dj_audio_path}
 
 @router.post("/jamendo/generate")
 async def generate_from_jamendo(db: Session = Depends(get_db)):
@@ -118,15 +130,10 @@ async def generate_from_jamendo(db: Session = Depends(get_db)):
         except Exception as e:
             db.delete(song)
             db.commit()
-            import logging
-            logging.warning(f"Jamendo download failed for {tid}: {e}")
     return {"created": len(created), "songs": created}
-
 
 @router.get("/jamendo/generate-stream")
 async def generate_from_jamendo_stream(db: Session = Depends(get_db)):
-    """Streaming endpoint with progress updates via SSE."""
-
     async def event_generator():
         try:
             from services.settings_service import get_json
@@ -166,13 +173,7 @@ async def generate_from_jamendo_stream(db: Session = Depends(get_db)):
             yield f"data: {json.dumps({'progress': 100, 'done': True, 'created': created})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e), 'progress': 0})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
-
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/{song_id}/generate-dj")
 async def generate_dj(song_id: int, db: Session = Depends(get_db)):
@@ -182,10 +183,9 @@ async def generate_dj(song_id: int, db: Session = Depends(get_db)):
     greeting_allowed = random.random() < 0.1
     text = await generate_dj_text(db, song.artist, song.title, song.album, greeting_allowed)
     song.dj_text = text
-    song.dj_audio_path = ""  # сброс озвучки при смене текста
+    song.dj_audio_path = ""
     db.commit()
     return {"dj_text": text}
-
 
 @router.post("/{song_id}/tts")
 async def generate_dj_audio(song_id: int, voice: str = "ru-RU-DmitryNeural", db: Session = Depends(get_db)):
@@ -194,17 +194,15 @@ async def generate_dj_audio(song_id: int, voice: str = "ru-RU-DmitryNeural", db:
         raise HTTPException(400, "Song or DJ text not found")
     audio_dir = Path(settings.upload_dir) / "dj"
     audio_dir.mkdir(parents=True, exist_ok=True)
-    path = audio_dir / f"dj_{song_id}.mp3"
+    path = audio_dir / f"dj_{song_id}_{uuid.uuid4().hex}.mp3"
     await text_to_speech(song.dj_text, path, voice, db=db)
     song.dj_audio_path = str(path)
     db.commit()
     return {"audio_path": song.dj_audio_path}
 
-
 @router.post("/generate-dj-batch")
 async def generate_dj_batch(song_ids: list[int] = Query(..., alias="song_ids"), db: Session = Depends(get_db)):
     from services.groq_service import RATE_LIMIT_DELAY
-
     results = []
     for i, sid in enumerate(song_ids):
         if i > 0:
@@ -222,7 +220,6 @@ async def generate_dj_batch(song_ids: list[int] = Query(..., alias="song_ids"), 
                 results.append({"id": sid, "error": str(e)})
     return {"results": results}
 
-
 @router.patch("/{song_id}")
 def update_song(song_id: int, data: SongUpdate, db: Session = Depends(get_db)):
     song = db.query(Song).get(song_id)
@@ -239,7 +236,6 @@ def update_song(song_id: int, data: SongUpdate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(song)
     return song
-
 
 @router.delete("/{song_id}")
 def delete_song(song_id: int, db: Session = Depends(get_db)):

@@ -1,5 +1,6 @@
+import uuid
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -44,6 +45,14 @@ def list_news(
         from sqlalchemy import or_
         q = q.filter(or_(News.broadcast_date == d, News.broadcast_date.is_(None)))
     return q.all()
+
+
+@router.get("/{news_id}")
+def get_news(news_id: int, db: Session = Depends(get_db)):
+    n = db.query(News).get(news_id)
+    if not n:
+        raise HTTPException(404, "News not found")
+    return n
 
 
 @router.get("/{news_id}/audio")
@@ -147,8 +156,22 @@ async def generate_news_audio(news_id: int, voice: str = "ru-RU-DmitryNeural", d
         raise HTTPException(400, "News or text not found")
     audio_dir = Path(settings.upload_dir) / "news"
     audio_dir.mkdir(parents=True, exist_ok=True)
-    path = audio_dir / f"news_{news_id}.mp3"
+    path = audio_dir / f"news_{news_id}_{uuid.uuid4().hex}.mp3"
     await text_to_speech(n.text, path, voice, db=db)
+    n.audio_path = str(path)
+    db.commit()
+    return {"audio_path": n.audio_path}
+
+
+@router.post("/{news_id}/upload-tts")
+async def upload_news_tts(news_id: int, file: UploadFile, db: Session = Depends(get_db)):
+    n = db.query(News).get(news_id)
+    if not n:
+        raise HTTPException(404, "News not found")
+    audio_dir = Path(settings.upload_dir) / "news"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    path = audio_dir / f"news_{news_id}_{uuid.uuid4().hex}.mp3"
+    path.write_bytes(await file.read())
     n.audio_path = str(path)
     db.commit()
     return {"audio_path": n.audio_path}
