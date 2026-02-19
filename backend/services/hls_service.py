@@ -98,6 +98,8 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
 def get_hls_url(db: Session, broadcast_date: date) -> str | None:
     """
     Возвращает URL HLS если готов, иначе None.
+    Сначала проверяет точное совпадение с текущим расписанием;
+    если расписание изменилось — возвращает любой доступный HLS для даты (fallback).
     """
     playlist = get_playlist_with_times(db, broadcast_date)
     if not playlist:
@@ -107,4 +109,22 @@ def get_hls_url(db: Session, broadcast_date: date) -> str | None:
     m3u8_path = get_hls_path(broadcast_date, schedule_hash) / "stream.m3u8"
     if m3u8_path.exists():
         return f"/hls/{broadcast_date}/{schedule_hash}/stream.m3u8"
-    return None
+
+    # Fallback: расписание изменилось, но есть HLS от предыдущей генерации
+    date_dir = _get_hls_dir() / str(broadcast_date)
+    if not date_dir.exists():
+        return None
+    best_url = None
+    best_mtime = 0
+    for subdir in date_dir.iterdir():
+        if subdir.is_dir():
+            m3u8 = subdir / "stream.m3u8"
+            if m3u8.exists():
+                try:
+                    mtime = m3u8.stat().st_mtime
+                    if mtime > best_mtime:
+                        best_mtime = mtime
+                        best_url = f"/hls/{broadcast_date}/{subdir.name}/stream.m3u8"
+                except OSError:
+                    pass
+    return best_url
