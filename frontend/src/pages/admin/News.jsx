@@ -35,7 +35,13 @@ export default function News() {
 
   useEffect(() => {
     load();
-    getTtsVoices().then((r) => setVoices(r.voices || []));
+    getTtsVoices().then((r) => {
+      const v = r.voices || [];
+      setVoices(v);
+      if (v.length > 0) {
+        setSelectedVoice((prev) => (v.some((x) => x[0] === prev) ? prev : v[0][0]));
+      }
+    });
   }, [selectedDate]);
 
   useEffect(() => {

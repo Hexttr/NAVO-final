@@ -20,7 +20,7 @@ export async function localElevenLabsTTS(text, voiceId) {
   if (!apiKey) throw new Error("API ключ ElevenLabs не найден на клиенте");
 
   // Fallback voice ID if an empty string or generic label is passed from our fallback logic
-  const actualVoiceId = voiceId && voiceId.length > 5 ? voiceId : "pFZP5JQG7iQjIQuC4Bku"; // default 'Lily' voice ID or any standard one
+  const actualVoiceId = voiceId && !voiceId.includes('-') && voiceId.length > 5 ? voiceId : "pFZP5JQG7iQjIQuC4Bku"; // default 'Lily' voice ID or any standard one
 
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${actualVoiceId}`, {
     method: "POST",
