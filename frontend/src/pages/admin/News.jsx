@@ -78,7 +78,8 @@ export default function News() {
 
   const handleTts = async (id) => {
     try {
-      await generateNewsTts(id, selectedVoice);
+      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
+      await generateNewsTts(id, voiceToUse);
       load();
     } catch (e) {
       alert(e.message || "Ошибка TTS");
@@ -91,10 +92,14 @@ export default function News() {
       alert("Нет выпусков для озвучки");
       return;
     }
+    
+    // Safety check: ensure voice is not default edge TTS if we are using ElevenLabs
+    const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
+    
     setTtsProgress({ current: 0, total: ids.length });
     for (let i = 0; i < ids.length; i++) {
       try {
-        const res = await generateNewsTts(ids[i], selectedVoice);
+        const res = await generateNewsTts(ids[i], voiceToUse);
         setItems((prev) =>
           prev.map((n) => (n.id === ids[i] ? { ...n, audio_path: res.audio_path } : n))
         );
@@ -146,7 +151,8 @@ export default function News() {
   const handleRevoiceInEdit = async (id) => {
     setEditBusy(true);
     try {
-      await generateNewsTts(id, selectedVoice);
+      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
+      await generateNewsTts(id, voiceToUse);
       load();
       setEditingId(null);
     } catch (e) {

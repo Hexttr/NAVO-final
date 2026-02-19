@@ -202,7 +202,8 @@ export default function SongsDj() {
 
   const handleTts = async (songId) => {
     try {
-      await generateDjTts(songId, selectedVoice);
+      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
+      await generateDjTts(songId, voiceToUse);
       load();
     } catch (e) {
       alert(e.message || "Ошибка TTS");
@@ -215,12 +216,13 @@ export default function SongsDj() {
       alert("Нет треков с текстом DJ для озвучки");
       return;
     }
+    const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
     saveBatch(DJ_BATCH_KEY, null);
-    saveBatch(TTS_BATCH_KEY, { songIds: ids, total: ids.length, voice: selectedVoice });
+    saveBatch(TTS_BATCH_KEY, { songIds: ids, total: ids.length, voice: voiceToUse });
     setTtsBatchProgress({ current: 0, total: ids.length });
     for (let i = 0; i < ids.length; i++) {
       try {
-        const res = await generateDjTts(ids[i], selectedVoice);
+        const res = await generateDjTts(ids[i], voiceToUse);
         setSongs((prev) =>
           prev.map((s) => (s.id === ids[i] ? { ...s, dj_audio_path: res.audio_path } : s))
         );
