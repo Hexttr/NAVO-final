@@ -29,6 +29,32 @@ def run(ssh, cmd, check=True):
     return out, err, code
 
 
+def update_env_key_only(client, key_name, env_var_name):
+    """Только обновить один ключ в .env на сервере. Для быстрого апдейта без полного деплоя."""
+    val = os.environ.get(env_var_name, "").strip()
+    if not val:
+        return False
+    sftp = client.open_sftp()
+    with sftp.file(f"{APP_DIR}/.env", "r") as f:
+        content = f.read().decode("utf-8", errors="replace")
+    lines = content.splitlines()
+    found = False
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(f"{key_name}=") or (stripped.startswith("#") and f"{key_name}=" in stripped):
+            new_lines.append(f"{key_name}={val}")
+            found = True
+        else:
+            new_lines.append(line)
+    if not found:
+        new_lines.append(f"{key_name}={val}")
+    with sftp.file(f"{APP_DIR}/.env", "w") as f:
+        f.write("\n".join(new_lines) + "\n")
+    sftp.close()
+    return True
+
+
 def main(dry_run=False):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
@@ -158,6 +184,34 @@ def main(dry_run=False):
     return 0
 
 
+def key_and_restart(ssh):
+    """Обновить ELEVENLABS_API_KEY в .env и перезапустить backend. Быстро, без полного деплоя."""
+    val = os.environ.get("NAVO_ELEVENLABS_API_KEY", "").strip()
+    if not val:
+        print("Задайте NAVO_ELEVENLABS_API_KEY в окружении")
+        return 1
+    if update_env_key_only(ssh, "ELEVENLABS_API_KEY", "NAVO_ELEVENLABS_API_KEY"):
+        print("Обновлён ELEVENLABS_API_KEY в .env")
+    run(ssh, "systemctl restart navo-radio")
+    print("navo-radio перезапущен")
+    out, _, code = run(ssh, "systemctl is-active navo-radio-source", check=False)
+    if code == 0:
+        run(ssh, "systemctl restart navo-radio-source")
+        print("navo-radio-source перезапущен")
+    return 0
+
+
 if __name__ == "__main__":
+    if "--key-and-restart" in sys.argv:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(HOST, username=USER, password=PASSWORD, timeout=15)
+            sys.exit(key_and_restart(client))
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            sys.exit(1)
+        finally:
+            client.close()
     dry = "--dry-run" in sys.argv or "-n" in sys.argv
     sys.exit(main(dry_run=dry))
