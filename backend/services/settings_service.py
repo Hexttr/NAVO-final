@@ -37,6 +37,7 @@ DEFAULTS = {
     "broadcast_intro_minute": 55,
     "weather_region": "dushanbe",
     "news_region": "tajikistan",
+    "elevenlabs_api_key_frontend": "",
 }
 
 WEATHER_REGIONS = {
