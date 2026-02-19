@@ -354,3 +354,19 @@ export async function getTtsVoices() {
   const r = await fetch(`${API}/tts/voices`);
   return r.json();
 }
+
+export async function getSettings() {
+  const r = await fetch(`${API}/settings`);
+  return r.json();
+}
+
+export async function saveSettings(data) {
+  const r = await fetch(`${API}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const res = await r.json();
+  if (!r.ok) throw new Error(res.detail || "Ошибка сохранения");
+  return res;
+}

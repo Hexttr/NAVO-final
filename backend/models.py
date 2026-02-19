@@ -80,3 +80,11 @@ class BroadcastItem(Base):
     duration_seconds = Column(Float, default=0)
     sort_order = Column(Integer, default=0)
     metadata_json = Column(Text, default="{}")  # title, artist, etc. for display
+
+
+class Setting(Base):
+    """Key-value settings from admin panel. Replaces hardcoded config for editable options."""
+    __tablename__ = "settings"
+
+    key = Column(String(64), primary_key=True)
+    value = Column(Text, default="")

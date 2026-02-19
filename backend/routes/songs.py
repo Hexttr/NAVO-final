@@ -11,7 +11,7 @@ from database import get_db
 from models import Song
 from config import settings
 from services.jamendo import JamendoService, search_tracks, download_track
-from services.groq_service import generate_dj_text
+from services.llm_service import generate_dj_text
 from services.tts_service import text_to_speech
 
 router = APIRouter(prefix="/songs", tags=["songs"])
@@ -89,7 +89,9 @@ async def upload_song_file(song_id: int, file: UploadFile, db: Session = Depends
 
 @router.post("/jamendo/generate")
 async def generate_from_jamendo(db: Session = Depends(get_db)):
-    tracks = await JamendoService.search_and_get_tracks(limit_per_query=20)
+    from services.settings_service import get_json
+    tags = get_json(db, "jamendo_tags") or JamendoService.SEARCH_QUERIES
+    tracks = await JamendoService.search_and_get_tracks(limit_per_query=20, search_queries=tags)
     if not tracks:
         raise HTTPException(502, "Jamendo API не вернул треки. Проверьте запрос или попробуйте позже.")
     created = []
@@ -127,7 +129,9 @@ async def generate_from_jamendo_stream(db: Session = Depends(get_db)):
 
     async def event_generator():
         try:
-            tracks = await JamendoService.search_and_get_tracks(limit_per_query=20)
+            from services.settings_service import get_json
+            tags = get_json(db, "jamendo_tags") or JamendoService.SEARCH_QUERIES
+            tracks = await JamendoService.search_and_get_tracks(limit_per_query=20, search_queries=tags)
             total = len(tracks)
             if total == 0:
                 yield f"data: {json.dumps({'error': 'Нет треков', 'progress': 0})}\n\n"
@@ -176,7 +180,7 @@ async def generate_dj(song_id: int, db: Session = Depends(get_db)):
     if not song:
         raise HTTPException(404, "Song not found")
     greeting_allowed = random.random() < 0.1
-    text = await generate_dj_text(song.artist, song.title, song.album, greeting_allowed)
+    text = await generate_dj_text(db, song.artist, song.title, song.album, greeting_allowed)
     song.dj_text = text
     song.dj_audio_path = ""  # сброс озвучки при смене текста
     db.commit()
@@ -191,7 +195,7 @@ async def generate_dj_audio(song_id: int, voice: str = "ru-RU-DmitryNeural", db:
     audio_dir = Path(settings.upload_dir) / "dj"
     audio_dir.mkdir(parents=True, exist_ok=True)
     path = audio_dir / f"dj_{song_id}.mp3"
-    await text_to_speech(song.dj_text, path, voice)
+    await text_to_speech(song.dj_text, path, voice, db=db)
     song.dj_audio_path = str(path)
     db.commit()
     return {"audio_path": song.dj_audio_path}
@@ -209,7 +213,7 @@ async def generate_dj_batch(song_ids: list[int] = Query(..., alias="song_ids"), 
         if song:
             try:
                 greeting_allowed = random.random() < 0.1
-                text = await generate_dj_text(song.artist, song.title, song.album, greeting_allowed)
+                text = await generate_dj_text(db, song.artist, song.title, song.album, greeting_allowed)
                 song.dj_text = text
                 song.dj_audio_path = ""
                 db.commit()

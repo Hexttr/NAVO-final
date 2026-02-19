@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +19,7 @@ from routes import (
     podcasts_router,
     intros_router,
     broadcast_router,
+    settings_router,
 )
 from config import settings
 from services.tts_service import list_voices
@@ -70,11 +71,12 @@ app.include_router(weather_router, prefix="/api")
 app.include_router(podcasts_router, prefix="/api")
 app.include_router(intros_router, prefix="/api")
 app.include_router(broadcast_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 @app.get("/api/tts/voices")
-async def get_tts_voices():
-    return {"voices": await list_voices()}
+async def get_tts_voices(db = Depends(get_db)):
+    return {"voices": await list_voices(db)}
 
 
 # Serve uploaded files

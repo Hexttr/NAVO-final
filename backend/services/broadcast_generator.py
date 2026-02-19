@@ -1,11 +1,6 @@
 """
 Generate broadcast schedule for a day (Moscow time).
-Slots:
-- News: 9, 12, 15, 18, 21
-- Weather: 10, 13, 16, 19, 22
-- Podcasts: 11, 14, 17, 20, 23
-- INTRO: at XX:55 every hour
-- Songs + DJ: fill the rest
+Slots and intro minute from settings (editable in admin).
 """
 from datetime import date
 import random
@@ -13,27 +8,16 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from models import Song, News, Weather, Podcast, Intro, BroadcastItem
 from services.streamer_service import get_entity_duration_from_file
+from services.settings_service import get_json, get
 
-
-FIXED_SLOTS = [
-    (9, 0, "news"),
-    (10, 0, "weather"),
-    (11, 0, "podcast"),
-    (12, 0, "news"),
-    (13, 0, "weather"),
-    (14, 0, "podcast"),
-    (15, 0, "news"),
-    (16, 0, "weather"),
-    (17, 0, "podcast"),
-    (18, 0, "news"),
-    (19, 0, "weather"),
-    (20, 0, "podcast"),
-    (21, 0, "news"),
-    (22, 0, "weather"),
-    (23, 0, "podcast"),
+DEFAULT_SLOTS = [
+    (9, 0, "news"), (10, 0, "weather"), (11, 0, "podcast"),
+    (12, 0, "news"), (13, 0, "weather"), (14, 0, "podcast"),
+    (15, 0, "news"), (16, 0, "weather"), (17, 0, "podcast"),
+    (18, 0, "news"), (19, 0, "weather"), (20, 0, "podcast"),
+    (21, 0, "news"), (22, 0, "weather"), (23, 0, "podcast"),
 ]
-
-INTRO_MINUTE = 55
+DEFAULT_INTRO_MINUTE = 55
 
 
 def _time_str(h: int, m: int, s: int = 0) -> str:
@@ -50,6 +34,12 @@ def _sec_to_hms(sec: int) -> tuple[int, int, int]:
 def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]:
     """Generate full day broadcast. Replaces existing items for date."""
     db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == broadcast_date).delete()
+
+    raw_slots = get_json(db, "broadcast_slots") or DEFAULT_SLOTS
+    intro_min = int(get(db, "broadcast_intro_minute") or DEFAULT_INTRO_MINUTE)
+    fixed_slots = [(int(s[0]), int(s[1]), str(s[2])) for s in raw_slots if len(s) >= 3 and s[2] in ("news", "weather", "podcast")]
+    if not fixed_slots:
+        fixed_slots = DEFAULT_SLOTS
 
     songs = list(db.query(Song).filter(Song.file_path != "").all())
     # Новости и погода: для даты X — только записи с broadcast_date=X или null (обратная совместимость)
@@ -92,7 +82,7 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
     # Timed events: (second of day, entity_type, entity_id, duration_sec, meta)
     timed_events = []
 
-    for h, m, et in FIXED_SLOTS:
+    for h, m, et in fixed_slots:
         t_sec = h * 3600 + m * 60
         if et == "news" and news_list:
             n = next(news_it)
@@ -126,7 +116,7 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
             timed_events.append((t_sec, "podcast", p.id, dur, p.title))
 
     for h in range(24):
-        t_sec = h * 3600 + INTRO_MINUTE * 60
+        t_sec = h * 3600 + intro_min * 60
         if intros:
             i = next(intro_it)
             dur = int(get_entity_duration_from_file(db, "intro", i.id))

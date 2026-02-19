@@ -9,7 +9,7 @@ from models import Weather, BroadcastItem
 from config import settings
 from pathlib import Path
 from services.weather_service import fetch_weather_forecast
-from services.groq_service import generate_weather_text
+from services.llm_service import generate_weather_text
 from services.tts_service import text_to_speech
 
 router = APIRouter(prefix="/weather", tags=["weather"])
@@ -61,7 +61,7 @@ async def generate_weather(
     db: Session = Depends(get_db),
 ):
     raw = await fetch_weather_forecast()
-    text = await generate_weather_text(raw)
+    text = await generate_weather_text(db, raw)
     w = Weather(text=text, broadcast_date=d)
     db.add(w)
     db.commit()
@@ -78,7 +78,7 @@ async def regenerate_weather(
 ):
     """Перегенерировать: создаёт НОВУЮ запись на дату d, обновляет слот. Иначе — перезаписывает текущую."""
     raw = await fetch_weather_forecast()
-    text = await generate_weather_text(raw)
+    text = await generate_weather_text(db, raw)
 
     if d is not None:
         w = Weather(text=text, broadcast_date=d)
@@ -113,7 +113,7 @@ async def generate_weather_audio(weather_id: int, voice: str = "ru-RU-DmitryNeur
     audio_dir = Path(settings.upload_dir) / "weather"
     audio_dir.mkdir(parents=True, exist_ok=True)
     path = audio_dir / f"weather_{weather_id}.mp3"
-    await text_to_speech(w.text, path, voice)
+    await text_to_speech(w.text, path, voice, db=db)
     w.audio_path = str(path)
     db.commit()
     return {"audio_path": w.audio_path}

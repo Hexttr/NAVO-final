@@ -8,7 +8,7 @@ from models import News, BroadcastItem
 from config import settings
 from pathlib import Path
 from services.news_service import fetch_news_from_rss
-from services.groq_service import generate_news_text
+from services.llm_service import generate_news_text
 from services.tts_service import text_to_speech
 
 router = APIRouter(prefix="/news", tags=["news"])
@@ -75,7 +75,7 @@ async def generate_news(
         raise HTTPException(500, "Не удалось получить новости из RSS. Проверьте доступность источников.")
     news_texts = [f"{x['title']}. {x['summary']}" for x in items]
     try:
-        text = await generate_news_text(news_texts)
+        text = await generate_news_text(db, news_texts)
     except ValueError as e:
         raise HTTPException(500, str(e))
     n = News(text=text, broadcast_date=d)
@@ -98,7 +98,7 @@ async def regenerate_news(
         raise HTTPException(500, "Не удалось получить новости из RSS. Проверьте доступность источников.")
     news_texts = [f"{x['title']}. {x['summary']}" for x in items]
     try:
-        text = await generate_news_text(news_texts)
+        text = await generate_news_text(db, news_texts)
     except ValueError as e:
         raise HTTPException(500, str(e))
 
@@ -137,7 +137,7 @@ async def generate_news_audio(news_id: int, voice: str = "ru-RU-DmitryNeural", d
     audio_dir = Path(settings.upload_dir) / "news"
     audio_dir.mkdir(parents=True, exist_ok=True)
     path = audio_dir / f"news_{news_id}.mp3"
-    await text_to_speech(n.text, path, voice)
+    await text_to_speech(n.text, path, voice, db=db)
     n.audio_path = str(path)
     db.commit()
     return {"audio_path": n.audio_path}

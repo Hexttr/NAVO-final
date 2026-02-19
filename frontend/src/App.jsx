@@ -7,6 +7,7 @@ import Weather from "./pages/admin/Weather";
 import Podcasts from "./pages/admin/Podcasts";
 import Intros from "./pages/admin/Intros";
 import Broadcast from "./pages/admin/Broadcast";
+import Settings from "./pages/admin/Settings";
 import "./App.css";
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
           <Route path="weather" element={<Weather />} />
           <Route path="podcasts" element={<Podcasts />} />
           <Route path="intros" element={<Intros />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="broadcast" element={<Broadcast />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

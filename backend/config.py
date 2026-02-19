@@ -7,6 +7,7 @@ _env_path = Path(__file__).resolve().parent.parent / ".env"
 class Settings(BaseSettings):
     jamendo_client_id: str = ""
     groq_api_key: str = ""
+    openai_api_key: str = ""
     weather_api_key: str = ""
     tts_provider: str = "edge-tts"
     tts_rate: str = "+25%"  # скорость: +20% быстрее, -50% медленнее
