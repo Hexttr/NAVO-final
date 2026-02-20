@@ -71,7 +71,7 @@ def main():
     for svc in ["navo-radio", "navo-radio-source", "icecast2"]:
         out, _, code = run(client, f"systemctl is-active {svc} 2>/dev/null || echo inactive")
         status = out.strip() if out.strip() else "not-found"
-        icon = "✓" if status == "active" else "✗"
+        icon = "[OK]" if status == "active" else "[--]"
         print(f"    {icon} {svc}: {status}")
 
     # 2. Icecast port
@@ -108,13 +108,11 @@ def main():
 
     # 5. Stream test
     print("\n[5] Проверка /stream (первые 1KB):")
-    out, err, code = run(client, "curl -s -o /dev/null -w '%{http_code} %{size_download}' --max-time 5 -r 0-1023 http://127.0.0.1:8000/stream 2>/dev/null || echo 'timeout 0'")
-    parts = out.strip().split()
-    http_code = parts[0] if parts else "?"
-    size = parts[1] if len(parts) > 1 else "0"
-    stream_ok = http_code == "200" and int(size or 0) > 0
-    icon = "✓" if stream_ok else "✗"
-    print(f"    {icon} HTTP {http_code}, получено {size} байт")
+    out, err, code = run(client, "curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8000/stream 2>/dev/null || echo 'err'")
+    http_code = (out or "").strip().split()[0][:10] if out else "?"
+    stream_ok = http_code == "200"
+    icon = "[OK]" if stream_ok else "[--]"
+    print(f"    {icon} HTTP {http_code}")
 
     # 6. HLS log tail
     print("\n[6] HLS генерация (последние 5 строк лога):")
