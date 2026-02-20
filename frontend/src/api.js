@@ -91,6 +91,14 @@ export async function generateDjBatch(songIds) {
 }
 
 export async function generateDjTts(songId, voice = "ru-RU-DmitryNeural") {
+  const settings = await getSettings();
+  if (settings.tts_provider === "elevenlabs") {
+    const r = await fetch(`${API}/songs/${songId}`);
+    const item = await r.json();
+    const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
+    const blob = await localElevenLabsTTS(item.dj_text, voice);
+    return uploadTTSAudio("songs", songId, blob);
+  }
   const r = await fetch(`${API}/songs/${songId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
@@ -158,6 +166,14 @@ export async function regenerateNewsText(newsId, broadcastDate, broadcastItemId)
 }
 
 export async function generateNewsTts(newsId, voice = "ru-RU-DmitryNeural") {
+  const settings = await getSettings();
+  if (settings.tts_provider === "elevenlabs") {
+    const r = await fetch(`${API}/news/${newsId}`);
+    const item = await r.json();
+    const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
+    const blob = await localElevenLabsTTS(item.text, voice);
+    return uploadTTSAudio("news", newsId, blob);
+  }
   const r = await fetch(`${API}/news/${newsId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
@@ -218,6 +234,14 @@ export async function regenerateWeatherText(weatherId, broadcastDate, broadcastI
 }
 
 export async function generateWeatherTts(weatherId, voice = "ru-RU-DmitryNeural") {
+  const settings = await getSettings();
+  if (settings.tts_provider === "elevenlabs") {
+    const r = await fetch(`${API}/weather/${weatherId}`);
+    const item = await r.json();
+    const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
+    const blob = await localElevenLabsTTS(item.text, voice);
+    return uploadTTSAudio("weather", weatherId, blob);
+  }
   const r = await fetch(`${API}/weather/${weatherId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
