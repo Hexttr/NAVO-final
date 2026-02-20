@@ -310,6 +310,22 @@
   color: white;
 }
 
+.item-edit-form-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .items-list {
   display: flex;
   flex-direction: column;

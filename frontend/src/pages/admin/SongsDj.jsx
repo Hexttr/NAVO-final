@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Square, X } from "lucide-react";
+import { Loader2, Play, Square, X } from "lucide-react";
 import {
   getSongs,
   createSong,
@@ -42,6 +42,10 @@ export default function SongsDj() {
   const [newArtist, setNewArtist] = useState("");
   const [newAlbum, setNewAlbum] = useState("");
   const [editingDj, setEditingDj] = useState(null);
+  const [editingText, setEditingText] = useState("");
+  const [regeneratingSongId, setRegeneratingSongId] = useState(null);
+  const [revoicingSongId, setRevoicingSongId] = useState(null);
+  const editTextareaRef = useRef(null);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const [jamendoProgress, setJamendoProgress] = useState(null);
   const [djBatchProgress, setDjBatchProgress] = useState(null);
@@ -49,6 +53,14 @@ export default function SongsDj() {
   const [playingId, setPlayingId] = useState(null);
   const [playingDjId, setPlayingDjId] = useState(null);
   const audioRef = useRef(null);
+
+  useEffect(() => {
+    const ta = editTextareaRef.current;
+    if (ta && editingDj) {
+      ta.style.height = "auto";
+      ta.style.height = Math.max(80, ta.scrollHeight) + "px";
+    }
+  }, [editingText, editingDj]);
 
   useEffect(() => {
     load();
@@ -236,10 +248,49 @@ export default function SongsDj() {
     setTtsBatchProgress(null);
   };
 
-  const handleSaveDj = async (songId, text) => {
+  const handleSaveDj = async (songId, text, close = true) => {
     await updateSong(songId, { dj_text: text });
-    setEditingDj(null);
-    load();
+    if (close) setEditingDj(null);
+    setSongs((prev) =>
+      prev.map((s) => (s.id === songId ? { ...s, dj_text: text } : s))
+    );
+  };
+
+  const handleRegenerateInEdit = async (songId) => {
+    const song = songs.find((s) => s.id === songId);
+    if (!song?.file_path) {
+      alert("Сначала загрузите MP3");
+      return;
+    }
+    setRegeneratingSongId(songId);
+    try {
+      const res = await generateDj(songId);
+      setEditingText(res.dj_text || "");
+      setSongs((prev) =>
+        prev.map((s) => (s.id === songId ? { ...s, dj_text: res.dj_text, dj_audio_path: "" } : s))
+      );
+    } catch (e) {
+      alert(e.message || "Ошибка");
+    } finally {
+      setRegeneratingSongId(null);
+    }
+  };
+
+  const handleRevoiceInEdit = async (songId, currentText) => {
+    if (!currentText?.trim()) return;
+    const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
+    setRevoicingSongId(songId);
+    try {
+      await updateSong(songId, { dj_text: currentText });
+      const res = await generateDjTts(songId, voiceToUse);
+      setSongs((prev) =>
+        prev.map((s) => (s.id === songId ? { ...s, dj_text: currentText, dj_audio_path: res.audio_path } : s))
+      );
+    } catch (e) {
+      alert(e.message || "Ошибка TTS");
+    } finally {
+      setRevoicingSongId(null);
+    }
   };
 
   const handleDelete = async (songId) => {
@@ -395,20 +446,74 @@ export default function SongsDj() {
               <td>{s.album || "—"}</td>
               <td className="col-dj-text">
                 {editingDj === s.id ? (
-                  <div>
+                  <div className="item-edit-form">
                     <textarea
-                      defaultValue={s.dj_text}
-                      onBlur={(e) => handleSaveDj(s.id, e.target.value)}
-                      rows={3}
-                      style={{ width: "100%", minWidth: 200 }}
+                      ref={editTextareaRef}
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      style={{
+                        width: "100%",
+                        minWidth: 200,
+                        minHeight: 80,
+                        overflow: "hidden",
+                        resize: "none",
+                      }}
+                      placeholder="Текст DJ..."
                     />
-                    <button onClick={() => setEditingDj(null)}>Готово</button>
+                    <div className="item-edit-form-actions">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveDj(s.id, editingText, false)}
+                        disabled={regeneratingSongId === s.id || revoicingSongId === s.id}
+                      >
+                        Сохранить
+                      </button>
+                      <button
+                        type="button"
+                        className="regen-btn"
+                        onClick={() => handleRegenerateInEdit(s.id)}
+                        disabled={regeneratingSongId === s.id || revoicingSongId === s.id || !s.file_path}
+                      >
+                        {regeneratingSongId === s.id && <Loader2 size={16} className="spin-icon" />}
+                        {regeneratingSongId === s.id
+                          ? " Генерация..."
+                          : editingText
+                            ? "Перегенерировать текст"
+                            : "Генерировать текст"}
+                      </button>
+                      <button
+                        type="button"
+                        className="revoice-btn"
+                        onClick={() => handleRevoiceInEdit(s.id, editingText)}
+                        disabled={
+                          regeneratingSongId === s.id ||
+                          revoicingSongId === s.id ||
+                          !editingText.trim()
+                        }
+                      >
+                        {revoicingSongId === s.id && <Loader2 size={16} className="spin-icon" />}
+                        {revoicingSongId === s.id ? " Озвучивание..." : s.dj_audio_path ? "Переозвучить" : "Озвучить"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveDj(s.id, editingText, true)}
+                      >
+                        Готово
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="dj-cell">
                     <span className="dj-text">{s.dj_text || "—"}</span>
                     <div className="dj-actions">
-                      <button onClick={() => setEditingDj(s.id)}>Редактировать</button>
+                      <button
+                        onClick={() => {
+                          setEditingDj(s.id);
+                          setEditingText(s.dj_text || "");
+                        }}
+                      >
+                        Редактировать
+                      </button>
                       {s.dj_audio_path && (
                         <button onClick={() => handlePlayDj(s)}>
                           {playingDjId === s.id ? "Стоп" : "Воспроизвести"}
