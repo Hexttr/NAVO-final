@@ -357,7 +357,15 @@ export async function getBroadcastNowPlaying(date) {
 
 export async function generateBroadcast(date) {
   const r = await fetch(`${API}/broadcast/generate?d=${date}`, { method: "POST" });
-  return r.json();
+  const text = await r.text();
+  try {
+    const data = JSON.parse(text);
+    if (!r.ok) throw new Error(data.detail || data.message || "Ошибка генерации");
+    return data;
+  } catch (e) {
+    if (e instanceof SyntaxError) throw new Error(r.status >= 500 ? "Ошибка сервера. Проверьте логи на сервере." : (text || "Ошибка генерации"));
+    throw e;
+  }
 }
 
 export async function recalcBroadcastDurations() {

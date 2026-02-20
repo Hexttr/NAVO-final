@@ -1,14 +1,34 @@
 """
 Generate broadcast schedule for a day (Moscow time).
 Slots and intro minute from settings (editable in admin).
+Валидная генерация без ошибок: безопасный парсинг, fallback-значения, без промежуточных commit.
 """
 from datetime import date
+import json
 import random
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from models import Song, News, Weather, Podcast, Intro, BroadcastItem
 from services.streamer_service import get_entity_duration_from_file
 from services.settings_service import get_json, get
+
+
+def _safe_duration(db: Session, entity_type: str, entity_id: int, fallback: float, obj=None) -> int:
+    """Получить длительность из файла; при ошибке — из объекта или fallback."""
+    try:
+        d = get_entity_duration_from_file(db, entity_type, entity_id)
+        if d and d > 0:
+            return int(d)
+    except Exception:
+        pass
+    if obj is not None and getattr(obj, "duration_seconds", None):
+        return int(obj.duration_seconds)
+    return int(fallback)
+
+
+def _safe_str(val, default: str = "—") -> str:
+    return str(val).strip()[:200] if val is not None else default
+
 
 DEFAULT_SLOTS = [
     (9, 0, "news"), (10, 0, "weather"), (11, 0, "podcast"),
@@ -36,8 +56,19 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
     db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == broadcast_date).delete()
 
     raw_slots = get_json(db, "broadcast_slots") or DEFAULT_SLOTS
-    intro_min = int(get(db, "broadcast_intro_minute") or DEFAULT_INTRO_MINUTE)
-    fixed_slots = [(int(s[0]), int(s[1]), str(s[2])) for s in raw_slots if len(s) >= 3 and s[2] in ("news", "weather", "podcast")]
+    try:
+        intro_min = int(get(db, "broadcast_intro_minute") or DEFAULT_INTRO_MINUTE)
+        intro_min = max(0, min(59, intro_min))
+    except (ValueError, TypeError):
+        intro_min = DEFAULT_INTRO_MINUTE
+
+    fixed_slots = []
+    for s in raw_slots if isinstance(raw_slots, list) else []:
+        try:
+            if isinstance(s, (list, tuple)) and len(s) >= 3 and str(s[2]) in ("news", "weather", "podcast"):
+                fixed_slots.append((int(s[0]), int(s[1]), str(s[2])))
+        except (ValueError, TypeError, IndexError):
+            continue
     if not fixed_slots:
         fixed_slots = DEFAULT_SLOTS
 
@@ -55,8 +86,8 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         .filter(or_(Weather.broadcast_date == broadcast_date, Weather.broadcast_date.is_(None)))
         .all()
     )
-    podcasts = list(db.query(Podcast).all())
-    intros = list(db.query(Intro).all())
+    podcasts = list(db.query(Podcast).filter(Podcast.file_path != "").all())
+    intros = list(db.query(Intro).filter(Intro.file_path != "").all())
 
     if not songs:
         raise ValueError("Нет песен. Добавьте хотя бы одну песню.")
@@ -86,47 +117,23 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         t_sec = h * 3600 + m * 60
         if et == "news" and news_list:
             n = next(news_it)
-            dur = int(get_entity_duration_from_file(db, "news", n.id))
-            if dur <= 0:
-                dur = int(n.duration_seconds or 120)
-            if dur > 0 and (not n.duration_seconds or abs(n.duration_seconds - dur) > 1):
-                n.duration_seconds = round(dur, 1)
-                db.commit()
-            dur = dur if dur > 0 else 120
+            dur = _safe_duration(db, "news", n.id, 120, n)
             timed_events.append((t_sec, "news", n.id, dur, "Новости"))
         elif et == "weather" and weather_list:
             w = next(weather_it)
-            dur = int(get_entity_duration_from_file(db, "weather", w.id))
-            if dur <= 0:
-                dur = int(w.duration_seconds or 90)
-            if dur > 0 and (not w.duration_seconds or abs(w.duration_seconds - dur) > 1):
-                w.duration_seconds = round(dur, 1)
-                db.commit()
-            dur = dur if dur > 0 else 90
+            dur = _safe_duration(db, "weather", w.id, 90, w)
             timed_events.append((t_sec, "weather", w.id, dur, "Погода"))
         elif et == "podcast" and podcasts:
             p = next(podcast_it)
-            dur = int(get_entity_duration_from_file(db, "podcast", p.id))
-            if dur <= 0:
-                dur = int(p.duration_seconds or 1800)
-            if dur > 0 and (not p.duration_seconds or abs(p.duration_seconds - dur) > 1):
-                p.duration_seconds = round(dur, 1)
-                db.commit()
-            dur = dur if dur > 0 else 1800
-            timed_events.append((t_sec, "podcast", p.id, dur, p.title))
+            dur = _safe_duration(db, "podcast", p.id, 1800, p)
+            timed_events.append((t_sec, "podcast", p.id, dur, _safe_str(getattr(p, "title", None), "Подкаст")))
 
     for h in range(24):
         t_sec = h * 3600 + intro_min * 60
         if intros:
             i = next(intro_it)
-            dur = int(get_entity_duration_from_file(db, "intro", i.id))
-            if dur <= 0:
-                dur = int(i.duration_seconds or 30)
-            if dur > 0 and (not i.duration_seconds or abs(i.duration_seconds - dur) > 1):
-                i.duration_seconds = round(dur, 1)
-                db.commit()
-            dur = dur if dur > 0 else 30
-            timed_events.append((t_sec, "intro", i.id, dur, i.title))
+            dur = _safe_duration(db, "intro", i.id, 30, i)
+            timed_events.append((t_sec, "intro", i.id, dur, _safe_str(getattr(i, "title", None), "Интро")))
 
     timed_events.sort(key=lambda x: x[0])
 
@@ -147,20 +154,16 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         nonlocal current_sec
         for _ in range(len(songs)):
             s = next_song()
-            dj = 45 if s.dj_audio_path else 0
-            dur = int(get_entity_duration_from_file(db, "song", s.id))
-            if dur <= 0:
-                dur = int(s.duration_seconds or 180)
-            if dur > 0 and (not s.duration_seconds or abs(s.duration_seconds - dur) > 1):
-                s.duration_seconds = round(dur, 1)
-                db.commit()
-            dur = dur if dur > 0 else 180
+            dj = 45 if getattr(s, "dj_audio_path", None) else 0
+            dur = _safe_duration(db, "song", s.id, 180, s)
             total = dj + dur
             if total <= remaining_sec:
-                if s.dj_audio_path:
-                    blocks.append((current_sec, "dj", s.id, dj, f"DJ: {s.artist} - {s.title}"))
+                artist = _safe_str(getattr(s, "artist", None), "?")
+                title = _safe_str(getattr(s, "title", None), "?")
+                if dj:
+                    blocks.append((current_sec, "dj", s.id, dj, f"DJ: {artist} - {title}"))
                     current_sec += dj
-                blocks.append((current_sec, "song", s.id, dur, f"{s.artist} - {s.title}"))
+                blocks.append((current_sec, "song", s.id, dur, f"{artist} - {title}"))
                 current_sec += dur
                 return True
         return False
@@ -186,7 +189,7 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         start = _time_str(h, m, s)
         eh, em, es = _sec_to_hms(int(start_sec + dur_sec))
         end = _time_str(eh, em, es)
-        safe_meta = meta.replace('"', "'")[:200]
+        meta_safe = (meta or "")[:200]
         items.append(BroadcastItem(
             broadcast_date=broadcast_date,
             entity_type=et,
@@ -195,7 +198,7 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
             end_time=end,
             duration_seconds=float(dur_sec),
             sort_order=order,
-            metadata_json=f'{{"title":"{safe_meta}"}}',
+            metadata_json=json.dumps({"title": meta_safe}),
         ))
 
     return items

@@ -259,6 +259,11 @@ def generate(
         return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~10-30 мин)."}
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, str(e))
 
 
 def _spawn_hls_generation(d: date) -> int | None:
