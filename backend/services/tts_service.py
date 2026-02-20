@@ -75,7 +75,11 @@ async def text_to_speech(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if provider == "elevenlabs":
-        return await _tts_elevenlabs(text, output_path, voice, db)
+        try:
+            return await _tts_elevenlabs(text, output_path, voice, db)
+        except Exception:
+            # ElevenLabs blocks server IP (302 → country restrictions) — fallback to Edge TTS
+            return await _tts_edge(text, output_path, "ru-RU-DmitryNeural", rate, volume, pitch)
     return await _tts_edge(text, output_path, voice, rate, volume, pitch)
 
 
