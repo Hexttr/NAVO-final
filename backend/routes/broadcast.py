@@ -439,19 +439,19 @@ def hls_status(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """Отладка: статус HLS, путь, наличие файлов."""
+    """Статус HLS. hasHls=true если есть любой доступный HLS (как get_hls_url, с fallback)."""
     from services.streamer_service import get_broadcast_schedule_hash
-    from services.hls_service import get_hls_path
+    from services.hls_service import get_hls_path, get_hls_url
 
     ensure_broadcast_for_date(db, d)
     playlist = get_playlist_with_times(db, d)
     if not playlist:
         return {"ok": False, "error": "Нет эфира на дату", "hasHls": False}
 
+    url = get_hls_url(db, d)
     schedule_hash = get_broadcast_schedule_hash(db, d)
     out_dir = get_hls_path(d, schedule_hash)
     m3u8_path = out_dir / "stream.m3u8"
-    # Есть ли HLS с любым hash (расписание могло меняться)
     date_dir = out_dir.parent
     existing_hashes = []
     if date_dir.exists():
@@ -459,10 +459,11 @@ def hls_status(
 
     return {
         "ok": True,
-        "hasHls": m3u8_path.exists(),
-        "url": f"/hls/{d}/{schedule_hash}/stream.m3u8" if m3u8_path.exists() else None,
+        "hasHls": url is not None,
+        "url": url,
         "schedule_hash": schedule_hash,
         "m3u8_path": str(m3u8_path),
+        "exact_ready": m3u8_path.exists(),
         "out_dir_exists": out_dir.exists(),
         "playlist_count": len(playlist),
         "existing_hashes": existing_hashes,

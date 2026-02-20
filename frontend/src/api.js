@@ -334,6 +334,13 @@ export async function getHlsUrl(date) {
   return data?.url || null;
 }
 
+/** Подсказка: использовать /stream напрямую при Icecast 404 */
+export async function getPlaybackHint() {
+  const base = API.replace("/api", "") || "";
+  const r = await fetch(`${base}/api/playback-hint`, { cache: "no-store" });
+  return r.json().catch(() => ({ preferStream: false }));
+}
+
 export async function getHlsStatus(date) {
   const r = await fetch(`${API}/broadcast/hls-status?d=${date}`);
   const data = await r.json();

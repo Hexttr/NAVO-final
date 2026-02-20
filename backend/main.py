@@ -153,6 +153,22 @@ def diagnostics(db=Depends(get_db)):
     return result
 
 
+@app.get("/api/playback-hint")
+def playback_hint():
+    """Подсказка для плеера: использовать /stream напрямую, если Icecast не работает (404)."""
+    from urllib.request import urlopen, Request
+    from urllib.error import URLError, HTTPError
+
+    try:
+        req = Request("http://127.0.0.1:8001/live", method="HEAD")
+        with urlopen(req, timeout=2) as r:
+            return {"preferStream": False, "icecast": r.status}
+    except HTTPError as e:
+        return {"preferStream": True, "icecast": e.code}
+    except (URLError, OSError):
+        return {"preferStream": True, "icecast": "unreachable"}
+
+
 @app.get("/stream-test")
 def stream_test(
     d: date | None = Query(None, description="Date YYYY-MM-DD"),

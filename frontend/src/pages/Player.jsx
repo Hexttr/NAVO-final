@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
 import Hls from "hls.js";
-import { getBroadcastNowPlaying, getHlsUrl, moscowDateStr } from "../api";
+import { getBroadcastNowPlaying, getHlsUrl, getPlaybackHint, moscowDateStr } from "../api";
 import "./Player.css";
 
 const STREAM_URL = "/stream";
@@ -37,6 +37,14 @@ export default function Player() {
   const playStream = async () => {
     if (!audioRef.current) return;
     const today = moscowDateStr();
+
+    // При Icecast 404 — сразу /stream (nginx fallback на backend)
+    const hint = await getPlaybackHint().catch(() => ({}));
+    if (hint.preferStream) {
+      playStreamFallback();
+      return;
+    }
+
     let hlsUrl = await getHlsUrl(today);
     const audio = audioRef.current;
 
