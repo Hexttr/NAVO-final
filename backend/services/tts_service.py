@@ -18,12 +18,16 @@ async def list_voices(db: Session) -> list[tuple[str, str]]:
     """Return voices for current TTS provider."""
     provider = get(db, "tts_provider") or "edge-tts"
     if provider == "elevenlabs":
-        return await _list_elevenlabs_voices()
+        return await _list_elevenlabs_voices(db)
     return EDGE_VOICES.copy()
 
 
-def _get_elevenlabs_api_key() -> str:
-    """API key from settings or os.environ (fallback for correct loading)."""
+def _get_elevenlabs_api_key(db: Session | None = None) -> str:
+    """API key from settings (elevenlabs_api_key_frontend or elevenlabs_api_key) or os.environ."""
+    if db:
+        key = get(db, "elevenlabs_api_key_frontend") or get(db, "elevenlabs_api_key") or ""
+        if key:
+            return key
     key = getattr(settings, "elevenlabs_api_key", None) or ""
     if not key:
         import os
@@ -31,15 +35,26 @@ def _get_elevenlabs_api_key() -> str:
     return key or ""
 
 
-async def _list_elevenlabs_voices() -> list[tuple[str, str]]:
-    api_key = _get_elevenlabs_api_key()
+async def _list_elevenlabs_voices(db: Session) -> list[tuple[str, str]]:
+    """Fetch ElevenLabs voices via backend (avoids CORS when frontend would call directly)."""
+    api_key = _get_elevenlabs_api_key(db)
+    default_voice_id = "pFZP5JQG7iQjIQuC4Bku"
     if not api_key:
-        return [("", "ElevenLabs: добавьте ELEVENLABS_API_KEY в .env")]
-    # If using proxy or running directly from client is not an option right now, we can hardcode 
-    # some known ElevenLabs voices, or return an empty list letting the user type the voice ID.
-    # But wait, the prompt asks: "Давай используем 2. Это админка." (Move to frontend).
-    # Since we need to move TTS to frontend, we should modify `generate_dj_audio`, `generateNewsTts`, etc.
-    return [("", "ElevenLabs: генерация перенесена на клиент")]
+        return [(default_voice_id, "Укажите ключ ElevenLabs в Настройках")]
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://api.elevenlabs.io/v1/voices",
+                headers={"xi-api-key": api_key},
+                timeout=15,
+            )
+            if not r.is_success:
+                return [(default_voice_id, "ElevenLabs (дефолтный голос)")]
+            data = r.json()
+            voices = data.get("voices", [])
+            return [(v["voice_id"], v.get("name") or v["voice_id"]) for v in voices[:50]]
+    except Exception:
+        return [(default_voice_id, "ElevenLabs (базовый голос)")]
 
 
 async def text_to_speech(
