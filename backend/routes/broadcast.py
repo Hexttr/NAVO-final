@@ -2,9 +2,11 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
+import sqlalchemy.exc
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -250,20 +252,32 @@ def generate(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    try:
-        items = generate_broadcast(db, d)
-        for item in items:
-            db.add(item)
-        db.commit()
-        _spawn_hls_generation(d)
-        return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~10-30 мин)."}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        db.rollback()
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, str(e))
+    for attempt in range(5):
+        try:
+            db.rollback()
+            items = generate_broadcast(db, d)
+            for item in items:
+                db.add(item)
+            db.commit()
+            _spawn_hls_generation(d)
+            return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~10-30 мин)."}
+        except ValueError as e:
+            db.rollback()
+            raise HTTPException(400, str(e))
+        except sqlalchemy.exc.OperationalError as e:
+            db.rollback()
+            if "locked" in str(e).lower() and attempt < 4:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise HTTPException(
+                503 if "locked" in str(e).lower() else 500,
+                "База занята (Icecast/HLS). Подождите 10–20 сек и повторите." if "locked" in str(e).lower() else str(e),
+            )
+        except Exception as e:
+            db.rollback()
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(500, str(e))
 
 
 def _spawn_hls_generation(d: date) -> int | None:
