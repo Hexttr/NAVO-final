@@ -90,6 +90,57 @@ def root():
     return {"message": "NAVO RADIO API", "docs": "/docs"}
 
 
+@app.get("/api/diagnostics")
+def diagnostics(db=Depends(get_db)):
+    """Диагностика: статус БД, эфир, HLS, stream. Для отладки проблем воспроизведения."""
+    from datetime import datetime, timezone, timedelta
+    from services.streamer_service import moscow_date, get_playlist_with_times, ensure_broadcast_for_date
+    from services.hls_service import get_hls_url
+
+    result = {"ok": True, "ts": datetime.now(timezone.utc).isoformat(), "checks": {}}
+    try:
+        today = moscow_date()
+        result["moscow_date"] = str(today)
+
+        # ensure broadcast for today (copy if needed)
+        try:
+            copied = ensure_broadcast_for_date(db, today)
+            result["checks"]["broadcast_copied"] = copied
+        except Exception as e:
+            result["checks"]["broadcast_ensure"] = f"ERROR: {e}"
+            result["ok"] = False
+
+        # broadcast items count
+        try:
+            playlist = get_playlist_with_times(db, today)
+            result["checks"]["broadcast_items"] = len(playlist) if playlist else 0
+            result["checks"]["broadcast_ready"] = bool(playlist and len(playlist) > 0)
+            if not playlist or len(playlist) == 0:
+                result["ok"] = False
+        except Exception as e:
+            result["checks"]["broadcast_playlist"] = f"ERROR: {e}"
+            result["ok"] = False
+
+        # HLS
+        try:
+            hls_url = get_hls_url(db, today)
+            result["checks"]["hls_ready"] = bool(hls_url)
+            result["checks"]["hls_url"] = hls_url
+        except Exception as e:
+            result["checks"]["hls"] = f"ERROR: {e}"
+            result["ok"] = False
+
+        # stream would work if we have playlist
+        result["checks"]["stream_ready"] = result["checks"].get("broadcast_ready", False)
+
+    except Exception as e:
+        result["ok"] = False
+        result["error"] = str(e)
+    finally:
+        db.close()
+    return result
+
+
 @app.get("/stream-test")
 def stream_test(
     d: date | None = Query(None, description="Date YYYY-MM-DD"),
