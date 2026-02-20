@@ -8,6 +8,7 @@ import {
   generateBroadcast,
   deleteBroadcast,
   generateHls,
+  getHlsStatus,
   deleteBroadcastItem,
   insertBroadcastItem,
   moveBroadcastItem,
@@ -34,6 +35,31 @@ import {
   getIntroAudioUrl,
 } from "../../api";
 import "./Broadcast.css";
+
+const HLS_GENERATING_KEY = "navo_hls_generating";
+const HLS_POLL_INTERVAL_MS = 15000;
+const HLS_TIMEOUT_MS = 45 * 60 * 1000;
+
+function getHlsGeneratingDates() {
+  try {
+    const raw = localStorage.getItem(HLS_GENERATING_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setHlsGenerating(date, startedAt = Date.now()) {
+  const map = getHlsGeneratingDates();
+  map[date] = startedAt;
+  localStorage.setItem(HLS_GENERATING_KEY, JSON.stringify(map));
+}
+
+function clearHlsGenerating(date) {
+  const map = getHlsGeneratingDates();
+  delete map[date];
+  localStorage.setItem(HLS_GENERATING_KEY, JSON.stringify(Object.keys(map).length ? map : {}));
+}
 
 const TYPE_LABELS = {
   song: "Песня",
@@ -62,7 +88,6 @@ export default function Broadcast() {
   const [revoicingId, setRevoicingId] = useState(null);
   const [regeneratingId, setRegeneratingId] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [generatingHls, setGeneratingHls] = useState(false);
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
@@ -80,6 +105,39 @@ export default function Broadcast() {
     lastViewIndexRef.current = null;
     load();
   }, [selectedDate]);
+
+  const [generatingHls, setGeneratingHls] = useState(false);
+
+  useEffect(() => {
+    const map = getHlsGeneratingDates();
+    setGeneratingHls(!!map[selectedDate]);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (!generatingHls) return;
+    const map = getHlsGeneratingDates();
+    const startedAt = map[selectedDate];
+    if (!startedAt) return;
+    if (Date.now() - startedAt > HLS_TIMEOUT_MS) {
+      clearHlsGenerating(selectedDate);
+      setGeneratingHls(false);
+      return;
+    }
+    const poll = async () => {
+      try {
+        const st = await getHlsStatus(selectedDate);
+        if (st?.hasHls) {
+          clearHlsGenerating(selectedDate);
+          setGeneratingHls(false);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    poll();
+    const id = setInterval(poll, HLS_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [generatingHls, selectedDate]);
 
   useEffect(() => {
     if (expandedId) lastViewIndexRef.current = null;
@@ -164,6 +222,8 @@ export default function Broadcast() {
       await generateBroadcast(selectedDate);
       setConfirmGen(false);
       load();
+      setHlsGenerating(selectedDate);
+      setGeneratingHls(true);
     } catch (e) {
       alert(e.message || "Ошибка генерации");
     } finally {
@@ -447,16 +507,14 @@ export default function Broadcast() {
             {deleting ? "…" : "Удалить эфир"}
           </button>
           <button
-            className="broadcast-btn broadcast-btn-secondary"
+            className={`broadcast-btn broadcast-btn-secondary broadcast-btn-hls ${generatingHls ? "broadcast-btn-hls-active" : ""}`}
             onClick={async () => {
-              setGeneratingHls(true);
               try {
                 await generateHls(selectedDate);
-                // Генерация идёт в фоне ~2–5 мин. Показываем «Обновляю HLS» 5 мин.
-                setTimeout(() => setGeneratingHls(false), 30 * 60 * 1000);
+                setHlsGenerating(selectedDate);
+                setGeneratingHls(true);
               } catch (e) {
                 alert(e.message || "Ошибка");
-                setGeneratingHls(false);
               }
             }}
             disabled={loading || generatingHls || items.length === 0}

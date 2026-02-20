@@ -328,6 +328,12 @@ export async function getHlsUrl(date) {
   return data?.url || null;
 }
 
+export async function getHlsStatus(date) {
+  const r = await fetch(`${API}/broadcast/hls-status?d=${date}`);
+  const data = await r.json();
+  return data;
+}
+
 export async function generateHls(date) {
   const r = await fetch(`${API}/broadcast/generate-hls?d=${date}`, { method: "POST" });
   const text = await r.text();
