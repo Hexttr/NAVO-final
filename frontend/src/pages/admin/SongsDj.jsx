@@ -213,12 +213,15 @@ export default function SongsDj() {
   };
 
   const handleTts = async (songId) => {
+    setRevoicingSongId(songId);
     try {
       const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
       await generateDjTts(songId, voiceToUse);
       load();
     } catch (e) {
       alert(e.message || "Ошибка TTS");
+    } finally {
+      setRevoicingSongId(null);
     }
   };
 
@@ -463,7 +466,7 @@ export default function SongsDj() {
                     <div className="item-edit-form-actions">
                       <button
                         type="button"
-                        onClick={() => handleSaveDj(s.id, editingText, false)}
+                        onClick={() => handleSaveDj(s.id, editingText, true)}
                         disabled={regeneratingSongId === s.id || revoicingSongId === s.id}
                       >
                         Сохранить
@@ -494,12 +497,6 @@ export default function SongsDj() {
                         {revoicingSongId === s.id && <Loader2 size={16} className="spin-icon" />}
                         {revoicingSongId === s.id ? " Озвучивание..." : s.dj_audio_path ? "Переозвучить" : "Озвучить"}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSaveDj(s.id, editingText, true)}
-                      >
-                        Готово
-                      </button>
                     </div>
                   </div>
                 ) : (
@@ -523,7 +520,14 @@ export default function SongsDj() {
                         <button onClick={() => handleGenerateDj(s.id)}>Сгенерировать</button>
                       )}
                       {s.dj_text && !s.dj_audio_path && (
-                        <button onClick={() => handleTts(s.id)}>Озвучить</button>
+                        <button
+                          className="revoice-btn"
+                          onClick={() => handleTts(s.id)}
+                          disabled={revoicingSongId === s.id}
+                        >
+                          {revoicingSongId === s.id && <Loader2 size={14} className="spin-icon" />}
+                          {revoicingSongId === s.id ? " Озвучивание..." : "Озвучить"}
+                        </button>
                       )}
                     </div>
                   </div>
