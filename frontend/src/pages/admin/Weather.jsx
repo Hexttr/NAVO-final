@@ -78,7 +78,7 @@ export default function Weather() {
 
   const handleTts = async (id) => {
     try {
-      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
+      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
       await generateWeatherTts(id, voiceToUse);
       load();
     } catch (e) {
@@ -92,7 +92,7 @@ export default function Weather() {
       alert("Нет прогнозов для озвучки");
       return;
     }
-    const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
+    const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
     setTtsProgress({ current: 0, total: ids.length });
     for (let i = 0; i < ids.length; i++) {
       try {
@@ -148,7 +148,7 @@ export default function Weather() {
   const handleRevoiceInEdit = async (id) => {
     setEditBusy(true);
     try {
-      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "pFZP5JQG7iQjIQuC4Bku" : selectedVoice;
+      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
       await generateWeatherTts(id, voiceToUse);
       load();
       setEditingId(null);

@@ -38,7 +38,7 @@ def _get_elevenlabs_api_key(db: Session | None = None) -> str:
 async def _list_elevenlabs_voices(db: Session) -> list[tuple[str, str]]:
     """Fetch ElevenLabs voices via backend (avoids CORS when frontend would call directly)."""
     api_key = _get_elevenlabs_api_key(db)
-    default_voice_id = "pFZP5JQG7iQjIQuC4Bku"
+    default_voice_id = "dVRDrbP5ULGXB94se4KZ"
     if not api_key:
         return [(default_voice_id, "Укажите ключ ElevenLabs в Настройках")]
     try:
@@ -98,9 +98,8 @@ async def _tts_elevenlabs(text: str, output_path: Path, voice_id: str, db: Sessi
     api_key = _get_elevenlabs_api_key(db)
     if not api_key:
         raise RuntimeError("Укажите API ключ ElevenLabs в Настройках")
-    # Edge TTS voice IDs (ru-RU-*) are invalid for ElevenLabs — use default
-    if not voice_id or "-" in voice_id and voice_id.startswith("ru-"):
-        voice_id = "pFZP5JQG7iQjIQuC4Bku"
+    if not voice_id or ("-" in voice_id and voice_id.startswith("ru-")):
+        voice_id = "dVRDrbP5ULGXB94se4KZ"
 
     async with httpx.AsyncClient() as client:
         r = await client.post(
@@ -113,6 +112,12 @@ async def _tts_elevenlabs(text: str, output_path: Path, voice_id: str, db: Sessi
             json={
                 "text": text,
                 "model_id": "eleven_multilingual_v2",
+                "voice_settings": {
+                    "stability": 0.4,
+                    "similarity_boost": 0.75,
+                    "style": 0.3,
+                    "speed": 1.2,
+                },
             },
             timeout=60,
         )
