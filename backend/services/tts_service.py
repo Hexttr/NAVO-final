@@ -75,7 +75,7 @@ async def text_to_speech(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if provider == "elevenlabs":
-        return await _tts_elevenlabs(text, output_path, voice)
+        return await _tts_elevenlabs(text, output_path, voice, db)
     return await _tts_edge(text, output_path, voice, rate, volume, pitch)
 
 
@@ -94,12 +94,13 @@ async def _tts_edge(
     return output_path
 
 
-async def _tts_elevenlabs(text: str, output_path: Path, voice_id: str) -> Path:
-    api_key = _get_elevenlabs_api_key()
+async def _tts_elevenlabs(text: str, output_path: Path, voice_id: str, db: Session | None = None) -> Path:
+    api_key = _get_elevenlabs_api_key(db)
     if not api_key:
-        raise RuntimeError("ELEVENLABS_API_KEY не задан в .env")
-    if not voice_id:
-        raise ValueError("Выберите голос ElevenLabs в настройках")
+        raise RuntimeError("Укажите API ключ ElevenLabs в Настройках")
+    # Edge TTS voice IDs (ru-RU-*) are invalid for ElevenLabs — use default
+    if not voice_id or "-" in voice_id and voice_id.startswith("ru-"):
+        voice_id = "pFZP5JQG7iQjIQuC4Bku"
 
     async with httpx.AsyncClient() as client:
         r = await client.post(
