@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from database import get_db
-from services.streamer_service import get_playlist_with_times, stream_broadcast_async
+from services.streamer_service import get_playlist_with_times, ensure_broadcast_for_date, stream_broadcast_async
 
 from database import engine, Base, get_db
 from routes import (
@@ -97,10 +97,11 @@ def stream_test(
     """Тест: один файл. Открой /stream-test?d=2026-02-17 — если играет, проблема в мульти-стриме."""
     from services.streamer_service import moscow_date
 
-    broadcast_date = d or moscow_date()
+    req_date = d or moscow_date()
     db = next(get_db())
     try:
-        playlist = get_playlist_with_times(db, broadcast_date)
+        ensure_broadcast_for_date(db, req_date)
+        playlist = get_playlist_with_times(db, req_date)
     finally:
         db.close()
     if not playlist:
@@ -123,10 +124,11 @@ async def stream_audio(
 
     if not shutil.which("ffmpeg"):
         raise HTTPException(503, "FFmpeg не установлен. Установите: https://ffmpeg.org/download.html")
-    broadcast_date = d or moscow_date()
+    req_date = d or moscow_date()
     db = next(get_db())
     try:
-        playlist = get_playlist_with_times(db, broadcast_date)
+        ensure_broadcast_for_date(db, req_date)
+        playlist = get_playlist_with_times(db, req_date)
     finally:
         db.close()
     if not playlist:

@@ -12,7 +12,7 @@ from database import get_db
 from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
-from services.streamer_service import get_entity_duration_from_file, get_playlist_with_times
+from services.streamer_service import get_entity_duration_from_file, get_playlist_with_times, ensure_broadcast_for_date
 from services.hls_service import generate_hls, get_hls_url
 from config import settings
 
@@ -35,16 +35,18 @@ def get_playlist_urls(
     sync: bool = Query(True, description="Синхронизация по Москве"),
     db: Session = Depends(get_db),
 ):
-    """Плейлист для последовательного воспроизведения на фронте. Возвращает {items, startIndex}."""
+    """Плейлист для последовательного воспроизведения на фронте. Возвращает {items, startIndex}. Если на дату нет эфира — копируется с последнего дня."""
     from datetime import datetime, timezone, timedelta
 
+    ensure_broadcast_for_date(db, d)
+    broadcast_date = d
     # Относительные URL — браузер использует тот же протокол, что и страница (HTTPS)
     base = "/api"
 
     items = (
         db.query(BroadcastItem)
         .filter(
-            BroadcastItem.broadcast_date == d,
+            BroadcastItem.broadcast_date == broadcast_date,
             BroadcastItem.entity_type != "empty",
         )
         .order_by(BroadcastItem.sort_order)
@@ -81,7 +83,7 @@ def get_playlist_urls(
             if now_sec < start_sec:
                 start_index = i
                 break
-    return {"date": str(d), "items": result, "startIndex": start_index}
+    return {"date": str(broadcast_date), "items": result, "startIndex": start_index}
 
 
 @router.get("/debug-time")
@@ -127,11 +129,13 @@ def get_now_playing(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет»."""
+    """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет». Если на дату нет эфира — копируется с последнего дня."""
     from datetime import datetime, timezone, timedelta
     from fastapi.responses import JSONResponse
     import json
 
+    ensure_broadcast_for_date(db, d)
+    broadcast_date = d
     MOSCOW_TZ = timezone(timedelta(hours=3))
     now = datetime.now(MOSCOW_TZ)
     now_sec = now.hour * 3600 + now.minute * 60 + now.second
@@ -140,7 +144,7 @@ def get_now_playing(
     items = (
         db.query(BroadcastItem)
         .filter(
-            BroadcastItem.broadcast_date == d,
+            BroadcastItem.broadcast_date == broadcast_date,
             BroadcastItem.entity_type != "empty",
         )
         .order_by(BroadcastItem.sort_order)
@@ -405,7 +409,8 @@ def hls_url(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """URL HLS если готов, иначе null. Фронт использует для приоритета HLS над /stream."""
+    """URL HLS если готов, иначе null. Фронт использует для приоритета HLS над /stream. Если на дату нет эфира — копируется с последнего дня."""
+    ensure_broadcast_for_date(db, d)
     url = get_hls_url(db, d)
     return {"url": url, "hasHls": url is not None}
 
@@ -419,6 +424,7 @@ def hls_status(
     from services.streamer_service import get_broadcast_schedule_hash
     from services.hls_service import get_hls_path
 
+    ensure_broadcast_for_date(db, d)
     playlist = get_playlist_with_times(db, d)
     if not playlist:
         return {"ok": False, "error": "Нет эфира на дату", "hasHls": False}
@@ -526,6 +532,7 @@ def debug_concat(
     from datetime import datetime, timezone, timedelta
 
     broadcast_date = d or moscow_date()
+    ensure_broadcast_for_date(db, broadcast_date)
     playlist = get_playlist_with_times(db, broadcast_date)
     if not playlist:
         return {"ok": False, "error": "Нет эфира на дату", "playlist_count": 0}

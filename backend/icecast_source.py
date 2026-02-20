@@ -20,6 +20,7 @@ from services.streamer_service import (
     stream_broadcast_async,
     stream_broadcast_ffmpeg_concat,
     moscow_date,
+    ensure_broadcast_for_date,
     _find_current_position,
     get_broadcast_schedule_hash,
 )
@@ -52,7 +53,10 @@ def main():
             db = SessionLocal()
             try:
                 today = moscow_date()
-                # Синхронизация длительностей на сегодня — эфир и админка используют одни тайминги
+                copied = ensure_broadcast_for_date(db, today)
+                if copied:
+                    print(f"[icecast] Эфир скопирован на {today} (админ не сформировал)")
+                # Синхронизация длительностей — эфир и админка используют одни тайминги
                 try:
                     n = recalc_broadcast_for_date(db, today)
                     if n > 0:
@@ -65,7 +69,7 @@ def main():
                 db.close()
 
             if not playlist:
-                print("Нет эфира на сегодня. Ожидание 60 сек...")
+                print("Нет эфира (ни на сегодня, ни на предыдущие дни). Ожидание 60 сек...")
                 await asyncio.sleep(60)
                 continue
 

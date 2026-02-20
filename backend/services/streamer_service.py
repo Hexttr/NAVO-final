@@ -191,6 +191,71 @@ def get_entity_duration_from_file(db: Session, entity_type: str, entity_id: int)
 CHUNK_SIZE = 32 * 1024  # 32 KB
 
 
+def resolve_broadcast_date(db: Session, requested_date: date) -> date:
+    """
+    Возвращает последнюю дату с эфиром (включая requested_date).
+    Сканирует назад до 7 дней.
+    """
+    for days_back in range(8):
+        d = requested_date - timedelta(days=days_back)
+        has_items = (
+            db.query(BroadcastItem)
+            .filter(
+                BroadcastItem.broadcast_date == d,
+                BroadcastItem.entity_type != "empty",
+            )
+            .first()
+        )
+        if has_items:
+            return d
+    return requested_date
+
+
+def ensure_broadcast_for_date(db: Session, target_date: date) -> bool:
+    """
+    Если на target_date нет эфира — копируем с последней даты, где он есть.
+    Продолжаем до бесконечности: пока админ не сформирует эфир, будет копироваться.
+    Возвращает True если была копия, False если эфир уже был или нечего копировать.
+    """
+    has_items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == target_date,
+            BroadcastItem.entity_type != "empty",
+        )
+        .first()
+    )
+    if has_items:
+        return False
+
+    source_date = resolve_broadcast_date(db, target_date)
+    if source_date == target_date:
+        return False  # нет источника для копирования
+
+    source_items = (
+        db.query(BroadcastItem)
+        .filter(BroadcastItem.broadcast_date == source_date)
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    if not source_items:
+        return False
+
+    for item in source_items:
+        db.add(BroadcastItem(
+            broadcast_date=target_date,
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            start_time=item.start_time,
+            end_time=item.end_time,
+            duration_seconds=item.duration_seconds,
+            sort_order=item.sort_order,
+            metadata_json=item.metadata_json or "{}",
+        ))
+    db.commit()
+    return True
+
+
 def get_broadcast_schedule_hash(db: Session, broadcast_date: date) -> str:
     """Хеш эфирной сетки для обнаружения изменений. При смене расписания — перезагрузка стрима."""
     items = (
