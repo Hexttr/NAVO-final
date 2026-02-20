@@ -37,8 +37,25 @@ export default function Player() {
   const playStream = async () => {
     if (!audioRef.current) return;
     const today = moscowDateStr();
-    const hlsUrl = await getHlsUrl(today);
+    let hlsUrl = await getHlsUrl(today);
     const audio = audioRef.current;
+
+    if (hlsUrl) {
+      try {
+        const base = window.location.origin;
+        const fullUrl = hlsUrl.startsWith("http") ? hlsUrl : base + hlsUrl;
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), 5000);
+        try {
+          const probe = await fetch(fullUrl, { method: "HEAD", signal: ac.signal });
+          if (!probe.ok) hlsUrl = null;
+        } finally {
+          clearTimeout(t);
+        }
+      } catch {
+        hlsUrl = null;
+      }
+    }
 
     if (hlsUrl) {
       if (Hls.isSupported()) {

@@ -3,6 +3,28 @@ import { Activity, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 import { getDiagnostics } from "../../api";
 import "./Diagnostics.css";
 
+function HlsClientTest({ url }) {
+  const [status, setStatus] = useState(null);
+  const [testing, setTesting] = useState(false);
+  useEffect(() => {
+    if (!url) return;
+    setTesting(true);
+    const fullUrl = url.startsWith("http") ? url : window.location.origin + url;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    fetch(fullUrl, { method: "HEAD", signal: ctrl.signal })
+      .then((r) => { clearTimeout(t); setStatus(r.status); })
+      .catch((e) => { clearTimeout(t); setStatus(e.name || "err"); })
+      .finally(() => setTesting(false));
+  }, [url]);
+  if (testing) return <span className="diag-hint">Проверка доступа…</span>;
+  if (status === null) return null;
+  const ok = status === 200;
+  return (
+    <StatusBadge ok={ok} label={ok ? "Доступен с браузера" : `Браузер: ${status}`} />
+  );
+}
+
 function StatusBadge({ ok, label }) {
   return (
     <span className={`diag-badge ${ok ? "ok" : "fail"}`}>
@@ -96,6 +118,11 @@ export default function Diagnostics() {
               {checks.hls_url && (
                 <li className="diag-url" title={checks.hls_url}>
                   {checks.hls_url}
+                </li>
+              )}
+              {checks.hls_url && (
+                <li>
+                  <HlsClientTest url={checks.hls_url} />
                 </li>
               )}
             </ul>
