@@ -11,6 +11,12 @@ export async function getStats() {
   return r.json();
 }
 
+export async function getDiagnostics() {
+  const base = API.replace("/api", "") || "";
+  const r = await fetch(`${base}/api/diagnostics`, { cache: "no-store" });
+  return r.json();
+}
+
 export async function getSongs() {
   const r = await fetch(`${API}/songs`);
   return r.json();

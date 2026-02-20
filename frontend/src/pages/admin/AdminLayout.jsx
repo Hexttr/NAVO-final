@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
-import { Radio, Calendar, LayoutGrid, Music, Newspaper, CloudSun, Podcast, Mic, ArrowUp, Settings as SettingsIcon } from "lucide-react";
+import { Radio, Calendar, LayoutGrid, Music, Newspaper, CloudSun, Podcast, Mic, ArrowUp, Settings as SettingsIcon, Activity } from "lucide-react";
 import { getStats, moscowDateStr } from "../../api";
 import "./AdminLayout.css";
 
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { path: "podcasts", label: "Подкасты", icon: Podcast, countKey: "podcasts" },
   { path: "intros", label: "Интро", icon: Mic, countKey: "intros" },
   { path: "settings", label: "Настройки", icon: SettingsIcon, countKey: null },
+  { path: "diagnostics", label: "Диагностика", icon: Activity, countKey: null },
 ];
 
 export default function AdminLayout() {

@@ -92,8 +92,11 @@ def root():
 
 @app.get("/api/diagnostics")
 def diagnostics(db=Depends(get_db)):
-    """Диагностика: статус БД, эфир, HLS, stream. Для отладки проблем воспроизведения."""
-    from datetime import datetime, timezone, timedelta
+    """Диагностика: статус БД, эфир, HLS, stream, Icecast. Для отладки проблем воспроизведения."""
+    from datetime import datetime, timezone
+    from urllib.request import urlopen
+    from urllib.error import URLError, HTTPError
+
     from services.streamer_service import moscow_date, get_playlist_with_times, ensure_broadcast_for_date
     from services.hls_service import get_hls_url
 
@@ -132,6 +135,15 @@ def diagnostics(db=Depends(get_db)):
 
         # stream would work if we have playlist
         result["checks"]["stream_ready"] = result["checks"].get("broadcast_ready", False)
+
+        # Icecast (backend runs on same host)
+        try:
+            with urlopen("http://127.0.0.1:8001/live", timeout=3) as r:
+                result["checks"]["icecast_live"] = r.status
+        except HTTPError as e:
+            result["checks"]["icecast_live"] = e.code
+        except (URLError, OSError) as e:
+            result["checks"]["icecast_live"] = f"unreachable: {type(e).__name__}"
 
     except Exception as e:
         result["ok"] = False

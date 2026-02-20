@@ -12,8 +12,8 @@ Environment="ICECAST_HOST=127.0.0.1"
 Environment="ICECAST_PORT=8001"
 Environment="ICECAST_MOUNT=live"
 Environment="ICECAST_SOURCE_PASSWORD=navo-icecast-source-2024"
-# async — стабильно воспроизводится; ffmpeg_concat — без обрезки, но может не стартовать
-Environment="STREAM_MODE=async"
+# ffmpeg_concat — бесшовный поток, единый FFmpeg; async — сырая конкатенация
+Environment="STREAM_MODE=ffmpeg_concat"
 ExecStart=/opt/navo-radio/venv/bin/python icecast_source.py
 Restart=always
 RestartSec=10
