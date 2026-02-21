@@ -503,15 +503,18 @@ def _path_for_concat(p: Path) -> str:
     return str(p.resolve()).replace("\\", "/").replace("'", "'\\''")
 
 
-def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None) -> Path | None:
+def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None, start_from_idx: int = 0) -> Path | None:
     """
-    Создаёт concat-файл для FFmpeg. path=None → реальный файл тишины (duration в ffconcat ненадёжна).
+    Создаёт concat-файл для FFmpeg. path=None → реальный файл тишины.
+    start_from_idx: начать с этого индекса (для быстрого seek — только seek_sec в первом файле).
     Повторяем плейлист 2 раза для бесшовного перехода в полночь.
-    out_dir: если задан — создаём файл там (надёжнее чем /tmp при фоновых процессах).
     """
     lines = ["ffconcat version 1.0", ""]
     has_any = False
-    for path, _, dur, _ in playlist:
+    # Элементы с start_from_idx до конца + с начала до start_from_idx (для зацикливания)
+    indices = list(range(start_from_idx, len(playlist))) + list(range(0, start_from_idx))
+    for idx in indices:
+        path, _, dur, _ = playlist[idx]
         if path is not None and path.exists():
             lines.append(f"file '{_path_for_concat(path)}'")
             has_any = True
@@ -522,8 +525,9 @@ def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None) -> P
                 has_any = True
     if not has_any or len(lines) <= 2:
         return None
-    # Дублируем плейлист для зацикливания (2 суток)
-    for path, _, dur, _ in playlist:
+    # Дублируем для зацикливания
+    for idx in indices:
+        path, _, dur, _ = playlist[idx]
         if path is not None and path.exists():
             lines.append(f"file '{_path_for_concat(path)}'")
         elif dur > 0:
@@ -551,18 +555,18 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
         return
     now_sec = moscow_seconds_now() if sync_to_moscow else 0
     start_idx, seek_sec = _find_current_position(playlist, now_sec)
-    # Seek = сумма длительностей до start_idx. Используем dur из плейлиста — ffprobe для 300+ файлов = 1–2 мин задержки.
+    # Concat с start_from_idx — первый файл = текущий трек. Seek только seek_sec (0–300 сек), не 3+ часа.
     total_seek = 0.0
-    for i in range(start_idx):
-        _, _, dur = playlist[i][0], playlist[i][1], playlist[i][2]
-        total_seek += float(dur or 0)
+    stream_start_position_sec = 0.0  # для on_position: секунды от полуночи
     if start_idx < len(playlist):
         item_path = playlist[start_idx][0]
+        start_sec = playlist[start_idx][1]
         if item_path is not None and item_path.exists():
-            total_seek += seek_sec
+            total_seek = float(seek_sec)
         else:
-            total_seek += min(seek_sec, float(playlist[start_idx][2] or 0))
-    concat_path = _create_concat_file(playlist)
+            total_seek = min(seek_sec, float(playlist[start_idx][2] or 0))
+        stream_start_position_sec = float(start_sec) + total_seek
+    concat_path = _create_concat_file(playlist, start_from_idx=start_idx)
     if not concat_path or not concat_path.exists():
         # Fallback: concat не создан (нет ffmpeg/silence) — сырой стрим
         async for chunk in stream_broadcast_async(playlist, sync_to_moscow):
@@ -595,7 +599,7 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
                     break
                 yield chunk
                 if on_position and (time.time() - last_position_write) >= 2.0:
-                    pos = total_seek + (time.time() - stream_start)
+                    pos = stream_start_position_sec + (time.time() - stream_start)
                     try:
                         on_position(pos)
                     except Exception:
