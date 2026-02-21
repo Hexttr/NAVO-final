@@ -86,6 +86,60 @@ def get_playlist_urls(
     return {"date": str(broadcast_date), "items": result, "startIndex": start_index}
 
 
+@router.get("/now-playing-debug")
+def now_playing_debug(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    position: float | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Отладка now-playing: now_sec, источник, первые 5 слотов, слот вокруг now_sec."""
+    from services.streamer_service import moscow_seconds_now
+
+    ensure_broadcast_for_date(db, d)
+    stream_pos = None
+    try:
+        from services.stream_position import read_stream_position
+        stream_pos = read_stream_position()
+    except Exception:
+        pass
+
+    if stream_pos is not None:
+        now_sec = float(stream_pos)
+        source = "stream_position"
+    elif position is not None and position >= 0:
+        now_sec = float(position)
+        source = "client_position"
+    else:
+        now_sec = moscow_seconds_now()
+        source = "moscow_seconds_now"
+
+    now_sec = max(0, min(86400, now_sec))
+    items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == d,
+            BroadcastItem.entity_type != "empty",
+        )
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    slots = []
+    for it in items[:5]:
+        parts = (it.start_time or "00:00:00").split(":")
+        start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
+        end_sec = start_sec + float(it.duration_seconds or 0)
+        slots.append({"start": it.start_time, "end": it.end_time, "type": it.entity_type, "start_sec": start_sec, "end_sec": end_sec})
+
+    around = []
+    for it in items:
+        parts = (it.start_time or "00:00:00").split(":")
+        start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
+        end_sec = start_sec + float(it.duration_seconds or 0)
+        if start_sec - 60 <= now_sec <= end_sec + 60:
+            around.append({"start": it.start_time, "end": it.end_time, "type": it.entity_type, "id": it.entity_id, "start_sec": start_sec, "end_sec": end_sec, "match": start_sec <= now_sec < end_sec})
+    return {"now_sec": now_sec, "source": source, "items_count": len(items), "first_slots": slots, "slots_around_now": around}
+
+
 @router.get("/debug-time")
 def debug_time(
     d: date | None = Query(None, description="Date YYYY-MM-DD"),
