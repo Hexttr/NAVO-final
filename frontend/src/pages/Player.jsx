@@ -5,6 +5,7 @@ import { getBroadcastNowPlaying, getHlsUrl, getPlaylistMetadata, moscowDateStr }
 import "./Player.css";
 
 const STREAM_URL = "/stream";
+const HLS_CANPLAY_TIMEOUT_MS = 20000; // Если HLS не даёт canplay за 20 сек — fallback на /stream
 const EQ_BARS = 24;
 const BAR_COUNT = EQ_BARS;
 const MAX_RETRIES = 5;
@@ -87,7 +88,21 @@ export default function Player() {
         hls.loadSource(hlsUrl);
         hls.attachMedia(audio);
         positionGetterRef.current = () => audioRef.current?.currentTime ?? 0;
+        const hlsCanplayTimeout = setTimeout(() => {
+          if (hlsRef.current && audio.readyState < 2) {
+            hlsRef.current.destroy();
+            hlsRef.current = null;
+            playStreamFallback(serverStartSec);
+          }
+        }, HLS_CANPLAY_TIMEOUT_MS);
+        const clearCanplayTimeout = () => {
+          clearTimeout(hlsCanplayTimeout);
+        };
+        audio.addEventListener("canplay", clearCanplayTimeout, { once: true });
+        audio.addEventListener("playing", clearCanplayTimeout, { once: true });
+        audio.addEventListener("error", clearCanplayTimeout, { once: true });
         hls.on(Hls.Events.ERROR, (_, data) => {
+          clearTimeout(hlsCanplayTimeout);
           if (data.fatal) {
             hls.destroy();
             hlsRef.current = null;
@@ -122,8 +137,13 @@ export default function Player() {
             audio.currentTime = Math.min(startSec, audio.duration);
           }
         };
+        const nativeHlsTimeout = setTimeout(() => {
+          if (audio.readyState < 2) playStreamFallback(serverStartSec);
+        }, HLS_CANPLAY_TIMEOUT_MS);
+        const onCanplay = () => { clearTimeout(nativeHlsTimeout); seekToMoscow(); };
         audio.addEventListener("loadedmetadata", seekToMoscow, { once: true });
-        audio.addEventListener("canplay", seekToMoscow, { once: true });
+        audio.addEventListener("canplay", onCanplay, { once: true });
+        audio.addEventListener("error", () => clearTimeout(nativeHlsTimeout), { once: true });
         audio.play().catch((e) => {
           setError("Не удалось воспроизвести.");
           setLoading(false);
