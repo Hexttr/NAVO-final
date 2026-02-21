@@ -3,17 +3,20 @@
 NAVO RADIO — Source для Icecast.
 Читает эфир из БД, стримит через FFmpeg в Icecast.
 Один процесс = один поток = все слушатели слышат одно и то же.
+Пишет позицию в stream_position.json для синхронизации «Сейчас играет».
 """
 import asyncio
 import os
 import sys
 import signal
+import time
 
 # Запуск из backend/
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal
+from services.stream_position import write_stream_position
 from services.streamer_service import (
     get_playlist_with_times,
     stream_broadcast_async,
@@ -69,6 +72,8 @@ def main():
 
             now_sec = moscow_seconds_now()
             start_idx, seek_sec = _find_current_position(playlist, now_sec)
+            stream_start_position = now_sec
+            stream_start_wall_time = time.time()
             h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
             print(f"Стриминг эфира в Icecast ({len(playlist)} треков, mode={STREAM_MODE}), старт: idx={start_idx} seek={seek_sec}s ({h:02d}:{m:02d}:{s:02d} МСК)")
             icecast_url = f"icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}/{ICECAST_MOUNT}"
@@ -96,6 +101,17 @@ def main():
 
             stream_task = asyncio.create_task(stream_chunks())
 
+            async def write_position_loop():
+                """Пишем позицию потока каждые 2 сек — для синхронизации «Сейчас играет»."""
+                while not shutdown and not stream_task.done():
+                    await asyncio.sleep(2)
+                    if shutdown or stream_task.done():
+                        return
+                    pos = stream_start_position + (time.time() - stream_start_wall_time)
+                    write_stream_position(pos)
+
+            position_task = asyncio.create_task(write_position_loop())
+
             async def check_schedule():
                 nonlocal schedule_changed
                 while not shutdown and not stream_task.done():
@@ -122,6 +138,11 @@ def main():
             except (BrokenPipeError, ConnectionResetError):
                 pass
             finally:
+                position_task.cancel()
+                try:
+                    await position_task
+                except asyncio.CancelledError:
+                    pass
                 checker_task.cancel()
                 try:
                     await checker_task

@@ -33,6 +33,7 @@ export default function Player() {
   const dataArrayRef = useRef(null);
   const rafRef = useRef(null);
   const retryCountRef = useRef(0);
+  const positionGetterRef = useRef(null);
 
   const playStream = async () => {
     if (!audioRef.current) return;
@@ -69,10 +70,11 @@ export default function Player() {
         hlsRef.current = hls;
         hls.loadSource(hlsUrl);
         hls.attachMedia(audio);
+        positionGetterRef.current = () => audioRef.current?.currentTime ?? 0;
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
             hls.destroy();
-            playStreamFallback();
+            playStreamFallback(serverStartSec);
           }
         });
         audio.play().catch((e) => {
@@ -81,6 +83,7 @@ export default function Player() {
         });
       } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
         audio.src = hlsUrl;
+        positionGetterRef.current = () => audioRef.current?.currentTime ?? 0;
         const seekToMoscow = () => {
           if (audio.duration && isFinite(audio.duration)) {
             audio.currentTime = Math.min(startSec, audio.duration);
@@ -93,19 +96,22 @@ export default function Player() {
           setLoading(false);
         });
       } else {
-        playStreamFallback();
+        playStreamFallback(serverStartSec);
       }
     } else {
-      playStreamFallback();
+      playStreamFallback(serverStartSec);
     }
   };
 
-  const playStreamFallback = () => {
+  const playStreamFallback = (serverStartSec) => {
     if (!audioRef.current) return;
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+    const startSec = serverStartSec ?? moscowSecondsNow();
+    const playStartTime = Date.now();
+    positionGetterRef.current = () => startSec + (Date.now() - playStartTime) / 1000;
     audioRef.current.src = STREAM_URL + "?t=" + Date.now();
     audioRef.current.play().catch((e) => {
       setError("Не удалось воспроизвести. Проверьте эфир в админке.");
@@ -130,6 +136,7 @@ export default function Player() {
     retryCountRef.current = 0;
     unlockAudioContext();
     if (playing) {
+      positionGetterRef.current = null;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -157,7 +164,8 @@ export default function Player() {
 
   useEffect(() => {
     const poll = () => {
-      getBroadcastNowPlaying(moscowDateStr())
+      const pos = positionGetterRef.current?.();
+      getBroadcastNowPlaying(moscowDateStr(), pos)
         .then((r) => setNowPlayingTitle(r?.title || null))
         .catch(() => setNowPlayingTitle(null));
     };

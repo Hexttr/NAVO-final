@@ -361,8 +361,12 @@ export async function generateHls(date) {
   }
 }
 
-export async function getBroadcastNowPlaying(date) {
-  const r = await fetch(`${API}/broadcast/now-playing?d=${date}&_=${Date.now()}`, {
+export async function getBroadcastNowPlaying(date, positionSec = null) {
+  let url = `${API}/broadcast/now-playing?d=${date}&_=${Date.now()}`;
+  if (positionSec != null && positionSec >= 0) {
+    url += `&position=${Math.floor(positionSec)}`;
+  }
+  const r = await fetch(url, {
     cache: "no-store",
     headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
   });

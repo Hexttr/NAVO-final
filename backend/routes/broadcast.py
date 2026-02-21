@@ -126,16 +126,25 @@ def debug_time(
 @router.get("/now-playing")
 def get_now_playing(
     d: date = Query(..., description="Date YYYY-MM-DD"),
+    position: float | None = Query(None, description="Секунды от полуночи МСК — позиция в потоке (для точного совпадения с эфиром)"),
     db: Session = Depends(get_db),
 ):
-    """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет». Если на дату нет эфира — копируется с последнего дня."""
+    """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет».
+    Приоритет: 1) stream_position.json (Icecast source — фактическая позиция), 2) position от клиента (HLS), 3) время сервера."""
     from fastapi.responses import JSONResponse
     from services.streamer_service import moscow_seconds_now
+    from services.stream_position import read_stream_position
     import json
 
     ensure_broadcast_for_date(db, d)
     broadcast_date = d
-    now_sec = moscow_seconds_now()
+    stream_pos = read_stream_position()
+    if stream_pos is not None:
+        now_sec = stream_pos
+    elif position is not None and position >= 0:
+        now_sec = float(position)
+    else:
+        now_sec = moscow_seconds_now()
     h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
     current_time = f"{h:02d}:{m:02d}:{s:02d}"
 
@@ -154,7 +163,7 @@ def get_now_playing(
     for it in items:
         parts = (it.start_time or "00:00:00").split(":")
         start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
-        end_sec = start_sec + int(it.duration_seconds or 0)
+        end_sec = start_sec + float(it.duration_seconds or 0)
         if start_sec <= now_sec < end_sec:
             title = None
             if it.metadata_json:
