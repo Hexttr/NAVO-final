@@ -49,7 +49,7 @@ def list_news(
 
 @router.get("/{news_id}")
 def get_news(news_id: int, db: Session = Depends(get_db)):
-    n = db.query(News).get(news_id)
+    n = db.get(News,news_id)
     if not n:
         raise HTTPException(404, "News not found")
     return n
@@ -57,7 +57,7 @@ def get_news(news_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{news_id}/audio")
 def get_news_audio(news_id: int, db: Session = Depends(get_db)):
-    n = db.query(News).get(news_id)
+    n = db.get(News,news_id)
     if not n or not n.audio_path:
         raise HTTPException(404, "Audio not found")
     path = Path(n.audio_path)
@@ -139,7 +139,7 @@ async def regenerate_news(
         return n
     else:
         # Старое поведение: перезапись
-        n = db.query(News).get(news_id)
+        n = db.get(News,news_id)
         if not n:
             raise HTTPException(404, "News not found")
         n.text = text
@@ -151,7 +151,7 @@ async def regenerate_news(
 
 @router.post("/{news_id}/tts")
 async def generate_news_audio(news_id: int, voice: str = "ru-RU-DmitryNeural", db: Session = Depends(get_db)):
-    n = db.query(News).get(news_id)
+    n = db.get(News,news_id)
     if not n or not n.text:
         raise HTTPException(400, "News or text not found")
     audio_dir = Path(settings.upload_dir) / "news"
@@ -165,7 +165,7 @@ async def generate_news_audio(news_id: int, voice: str = "ru-RU-DmitryNeural", d
 
 @router.post("/{news_id}/upload-tts")
 async def upload_news_tts(news_id: int, file: UploadFile, db: Session = Depends(get_db)):
-    n = db.query(News).get(news_id)
+    n = db.get(News,news_id)
     if not n:
         raise HTTPException(404, "News not found")
     audio_dir = Path(settings.upload_dir) / "news"
@@ -179,7 +179,7 @@ async def upload_news_tts(news_id: int, file: UploadFile, db: Session = Depends(
 
 @router.patch("/{news_id}")
 def update_news(news_id: int, data: NewsUpdate, db: Session = Depends(get_db)):
-    n = db.query(News).get(news_id)
+    n = db.get(News,news_id)
     if not n:
         raise HTTPException(404, "News not found")
     if data.text is not None:
@@ -191,7 +191,7 @@ def update_news(news_id: int, data: NewsUpdate, db: Session = Depends(get_db)):
 
 @router.delete("/{news_id}")
 def delete_news(news_id: int, db: Session = Depends(get_db)):
-    n = db.query(News).get(news_id)
+    n = db.get(News,news_id)
     if not n:
         raise HTTPException(404, "News not found")
     db.delete(n)

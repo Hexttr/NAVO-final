@@ -2,12 +2,11 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 from config import settings
 
-_db_url = settings.database_url.replace("sqlite:///", "sqlite:///").replace("sqlite:///./", "sqlite:///./")
 _connect_args = {}
 if "sqlite" in settings.database_url:
     _connect_args = {"check_same_thread": False, "timeout": 30}
 
-engine = create_engine(_db_url, connect_args=_connect_args)
+engine = create_engine(settings.database_url, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

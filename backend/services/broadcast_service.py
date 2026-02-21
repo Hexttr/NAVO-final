@@ -9,24 +9,9 @@ from models import BroadcastItem, Song, News, Weather, Podcast, Intro
 from services.streamer_service import get_entity_duration_from_file
 
 
+from utils.time_utils import parse_time, time_str, sec_to_hms
+
 ANCHOR_TYPES = {"news", "weather", "podcast", "intro"}
-
-
-def _time_str(h: int, m: int, s: int = 0) -> str:
-    return f"{h:02d}:{m:02d}:{s:02d}"
-
-
-def _parse_time(t: str) -> int:
-    """Parse HH:MM:SS to seconds of day."""
-    parts = t.split(":")
-    return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
-
-
-def _sec_to_hms(sec: int) -> tuple[int, int, int]:
-    h = int(sec) // 3600
-    m = (int(sec) % 3600) // 60
-    s = int(sec) % 60
-    return h, m, s
 
 
 def recalc_times(db: Session, broadcast_date, items: list[BroadcastItem]) -> None:
@@ -36,14 +21,14 @@ def recalc_times(db: Session, broadcast_date, items: list[BroadcastItem]) -> Non
     for item in items:
         dur = float(item.duration_seconds or 0)
         if item.entity_type in ANCHOR_TYPES:
-            start_sec = _parse_time(item.start_time)
+            start_sec = parse_time(item.start_time)
         else:
             start_sec = prev_end_sec
         end_sec = start_sec + int(dur)
-        h, m, s = _sec_to_hms(start_sec)
-        item.start_time = _time_str(h, m, s)
-        eh, em, es = _sec_to_hms(end_sec)
-        item.end_time = _time_str(eh, em, es)
+        h, m, s = sec_to_hms(start_sec)
+        item.start_time = time_str(h, m, s)
+        eh, em, es = sec_to_hms(end_sec)
+        item.end_time = time_str(eh, em, es)
         prev_end_sec = end_sec
 
 
@@ -80,7 +65,7 @@ def get_entity_duration(db: Session, entity_type: str, entity_id: int) -> float:
             dur = get_entity_duration_from_file(db, "weather", entity_id)
         return dur if dur > 0 else 90.0
     if entity_type == "podcast":
-        p = db.query(Podcast).get(entity_id)
+        p = db.get(Podcast, entity_id)
         if not p:
             raise ValueError("Podcast not found")
         dur = float(p.duration_seconds or 0)
@@ -91,7 +76,7 @@ def get_entity_duration(db: Session, entity_type: str, entity_id: int) -> float:
                 db.commit()
         return dur if dur > 0 else 1800.0
     if entity_type == "intro":
-        i = db.query(Intro).get(entity_id)
+        i = db.get(Intro, entity_id)
         if not i:
             raise ValueError("Intro not found")
         dur = float(i.duration_seconds or 0)
@@ -182,19 +167,19 @@ def recalc_broadcast_for_date(db: Session, broadcast_date: date) -> int:
 def get_entity_meta(db: Session, entity_type: str, entity_id: int) -> str:
     """Get display title for entity."""
     if entity_type == "song":
-        s = db.query(Song).get(entity_id)
+        s = db.get(Song, entity_id)
         return f"{s.artist} - {s.title}" if s else "—"
     if entity_type == "dj":
-        s = db.query(Song).get(entity_id)
+        s = db.get(Song, entity_id)
         return f"DJ: {s.artist} - {s.title}" if s else "—"
     if entity_type == "news":
         return "Новости"
     if entity_type == "weather":
         return "Погода"
     if entity_type == "podcast":
-        p = db.query(Podcast).get(entity_id)
+        p = db.get(Podcast, entity_id)
         return p.title if p else "—"
     if entity_type == "intro":
-        i = db.query(Intro).get(entity_id)
+        i = db.get(Intro, entity_id)
         return i.title if i else "—"
     return "—"

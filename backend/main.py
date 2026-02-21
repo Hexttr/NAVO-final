@@ -178,21 +178,18 @@ def playback_hint():
 @app.get("/stream-test")
 def stream_test(
     d: date | None = Query(None, description="Date YYYY-MM-DD"),
+    db=Depends(get_db),
 ):
     """Тест: один файл. Открой /stream-test?d=2026-02-17 — если играет, проблема в мульти-стриме."""
     from services.streamer_service import moscow_date
 
     req_date = d or moscow_date()
-    db = next(get_db())
-    try:
-        ensure_broadcast_for_date(db, req_date)
-        playlist = get_playlist_with_times(db, req_date)
-    finally:
-        db.close()
+    ensure_broadcast_for_date(db, req_date)
+    playlist = get_playlist_with_times(db, req_date)
     if not playlist:
         raise HTTPException(404, "Нет эфира")
     path = playlist[0][0]
-    if not path.exists():
+    if path is None or not path.exists():
         raise HTTPException(404, f"Файл не найден: {path}")
     return FileResponse(path, media_type="audio/mpeg")
 
@@ -201,6 +198,7 @@ def stream_test(
 async def stream_audio(
     d: date | None = Query(None, description="Date YYYY-MM-DD, default today"),
     from_start: bool = Query(False, description="С начала дня (иначе — с текущего времени по Москве)"),
+    db=Depends(get_db),
 ):
     """Stream broadcast as continuous MP3. FFmpeg subprocess — надёжный chunked encoding. Синхронизация по Москве (UTC+3)."""
     import shutil
@@ -210,12 +208,8 @@ async def stream_audio(
     if not shutil.which("ffmpeg"):
         raise HTTPException(503, "FFmpeg не установлен. Установите: https://ffmpeg.org/download.html")
     req_date = d or moscow_date()
-    db = next(get_db())
-    try:
-        ensure_broadcast_for_date(db, req_date)
-        playlist = get_playlist_with_times(db, req_date)
-    finally:
-        db.close()
+    ensure_broadcast_for_date(db, req_date)
+    playlist = get_playlist_with_times(db, req_date)
     if not playlist:
         raise HTTPException(404, "Нет эфира на эту дату. Сгенерируйте сетку в админке.")
     return StreamingResponse(

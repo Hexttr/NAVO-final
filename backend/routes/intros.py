@@ -16,7 +16,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.get("/{intro_id}/audio")
 def get_intro_audio(intro_id: int, db: Session = Depends(get_db)):
-    i = db.query(Intro).get(intro_id)
+    i = db.get(Intro,intro_id)
     if not i or not i.file_path:
         raise HTTPException(404, "Intro audio not found")
     path = Path(i.file_path)
@@ -66,7 +66,7 @@ def recalc_intro_durations(db: Session = Depends(get_db)):
 
 @router.delete("/{intro_id}")
 def delete_intro(intro_id: int, db: Session = Depends(get_db)):
-    i = db.query(Intro).get(intro_id)
+    i = db.get(Intro,intro_id)
     if not i:
         raise HTTPException(404, "Intro not found")
     db.delete(i)

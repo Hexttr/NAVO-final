@@ -37,14 +37,14 @@ def list_songs(db: Session = Depends(get_db)):
 
 @router.get("/{song_id}")
 def get_song(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song:
         raise HTTPException(404, "Song not found")
     return song
 
 @router.get("/{song_id}/audio")
 def get_song_audio(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song or not song.file_path:
         raise HTTPException(404, "Audio not found")
     path = Path(song.file_path)
@@ -56,7 +56,7 @@ def get_song_audio(song_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{song_id}/dj-audio")
 def get_song_dj_audio(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song or not song.dj_audio_path:
         raise HTTPException(404, "DJ audio not found")
     path = Path(song.dj_audio_path)
@@ -74,7 +74,7 @@ async def create_song(data: SongCreate, db: Session = Depends(get_db)):
 
 @router.post("/upload/{song_id}")
 async def upload_song_file(song_id: int, file: UploadFile, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song:
         raise HTTPException(404, "Song not found")
     ext = Path(file.filename or "").suffix or ".mp3"
@@ -88,7 +88,7 @@ async def upload_song_file(song_id: int, file: UploadFile, db: Session = Depends
 
 @router.post("/{song_id}/upload-tts")
 async def upload_song_tts(song_id: int, file: UploadFile, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song:
         raise HTTPException(404, "Song not found")
     audio_dir = Path(settings.upload_dir) / "dj"
@@ -177,7 +177,7 @@ async def generate_from_jamendo_stream(db: Session = Depends(get_db)):
 
 @router.post("/{song_id}/generate-dj")
 async def generate_dj(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song:
         raise HTTPException(404, "Song not found")
     greeting_allowed = random.random() < 0.1
@@ -189,7 +189,7 @@ async def generate_dj(song_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{song_id}/tts")
 async def generate_dj_audio(song_id: int, voice: str = "ru-RU-DmitryNeural", db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song or not song.dj_text:
         raise HTTPException(400, "Song or DJ text not found")
     audio_dir = Path(settings.upload_dir) / "dj"
@@ -207,7 +207,7 @@ async def generate_dj_batch(song_ids: list[int] = Query(..., alias="song_ids"), 
     for i, sid in enumerate(song_ids):
         if i > 0:
             await asyncio.sleep(RATE_LIMIT_DELAY)
-        song = db.query(Song).get(sid)
+        song = db.get(Song,sid)
         if song:
             try:
                 greeting_allowed = random.random() < 0.1
@@ -222,7 +222,7 @@ async def generate_dj_batch(song_ids: list[int] = Query(..., alias="song_ids"), 
 
 @router.patch("/{song_id}")
 def update_song(song_id: int, data: SongUpdate, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song:
         raise HTTPException(404, "Song not found")
     if data.title is not None:
@@ -239,7 +239,7 @@ def update_song(song_id: int, data: SongUpdate, db: Session = Depends(get_db)):
 
 @router.delete("/{song_id}")
 def delete_song(song_id: int, db: Session = Depends(get_db)):
-    song = db.query(Song).get(song_id)
+    song = db.get(Song,song_id)
     if not song:
         raise HTTPException(404, "Song not found")
     db.delete(song)

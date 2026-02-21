@@ -16,7 +16,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.get("/{podcast_id}/audio")
 def get_podcast_audio(podcast_id: int, db: Session = Depends(get_db)):
-    p = db.query(Podcast).get(podcast_id)
+    p = db.get(Podcast,podcast_id)
     if not p or not p.file_path:
         raise HTTPException(404, "Podcast audio not found")
     path = Path(p.file_path)
@@ -66,7 +66,7 @@ def recalc_podcast_durations(db: Session = Depends(get_db)):
 
 @router.delete("/{podcast_id}")
 def delete_podcast(podcast_id: int, db: Session = Depends(get_db)):
-    p = db.query(Podcast).get(podcast_id)
+    p = db.get(Podcast,podcast_id)
     if not p:
         raise HTTPException(404, "Podcast not found")
     db.delete(p)

@@ -90,12 +90,7 @@ def moscow_seconds_now() -> int:
     return max(0, min(86400 - 1, base + offset))
 
 
-def _parse_time(t: str) -> int:
-    """Parse HH:MM:SS to seconds since midnight."""
-    parts = t.split(":")
-    if len(parts) != 3:
-        return 0
-    return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+from utils.time_utils import parse_time as _parse_time
 
 # Project root for resolving relative paths (backend/services -> backend -> project)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -395,19 +390,13 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
             item = playlist[idx]
             path = item[0]
             duration_sec = item[2]
-            # Файл отсутствует — генерируем тишину (сохраняем синхронизацию с расписанием)
-            if path is None:
+            # Файл отсутствует или не найден — генерируем тишину (сохраняем синхронизацию с расписанием)
+            if path is None or not path.exists():
                 silence_dur = duration_sec
                 if first_round and idx == start_idx and seek_sec > 0:
                     silence_dur = max(0, duration_sec - seek_sec)
                 for chunk in _generate_silence_mp3(silence_dur):
                     yield chunk
-                idx += 1
-                if idx >= len(playlist):
-                    idx = 0
-                    first_round = False
-                continue
-            if not path.exists():
                 idx += 1
                 if idx >= len(playlist):
                     idx = 0
@@ -658,11 +647,17 @@ async def stream_broadcast_ffmpeg(playlist: list[tuple], sync_to_moscow: bool = 
             if first_round and idx == start_idx and seek_sec > 0:
                 skip = min(int(seek_sec), int(duration_sec) - 1)
                 skip = max(0, skip)
-            if not path.exists():
-                idx = (idx + 1) % len(playlist)
-                if idx == 0:
-                    first_round = False
-                continue
+            if path is None or not path.exists():
+                # Файл отсутствует — подставляем тишину (сохраняем синхронизацию)
+                silence_path = _get_or_create_silence_mp3(int(duration_sec or 1))
+                if silence_path and silence_path.exists():
+                    path = silence_path
+                    skip = 0
+                else:
+                    idx = (idx + 1) % len(playlist)
+                    if idx == 0:
+                        first_round = False
+                    continue
             args = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-ss", str(skip),

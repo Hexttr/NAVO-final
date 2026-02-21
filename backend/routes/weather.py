@@ -39,7 +39,7 @@ def list_weather(
 
 @router.get("/{weather_id}")
 def get_weather(weather_id: int, db: Session = Depends(get_db)):
-    w = db.query(Weather).get(weather_id)
+    w = db.get(Weather,weather_id)
     if not w:
         raise HTTPException(404, "Weather not found")
     return w
@@ -47,7 +47,7 @@ def get_weather(weather_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{weather_id}/audio")
 def get_weather_audio(weather_id: int, db: Session = Depends(get_db)):
-    w = db.query(Weather).get(weather_id)
+    w = db.get(Weather,weather_id)
     if not w or not w.audio_path:
         raise HTTPException(404, "Audio not found")
     path = Path(w.audio_path)
@@ -109,7 +109,7 @@ async def regenerate_weather(
                 db.commit()
         return w
     else:
-        w = db.query(Weather).get(weather_id)
+        w = db.get(Weather,weather_id)
         if not w:
             raise HTTPException(404, "Weather not found")
         w.text = text
@@ -121,7 +121,7 @@ async def regenerate_weather(
 
 @router.post("/{weather_id}/tts")
 async def generate_weather_audio(weather_id: int, voice: str = "ru-RU-DmitryNeural", db: Session = Depends(get_db)):
-    w = db.query(Weather).get(weather_id)
+    w = db.get(Weather,weather_id)
     if not w or not w.text:
         raise HTTPException(400, "Weather or text not found")
     audio_dir = Path(settings.upload_dir) / "weather"
@@ -135,7 +135,7 @@ async def generate_weather_audio(weather_id: int, voice: str = "ru-RU-DmitryNeur
 
 @router.post("/{weather_id}/upload-tts")
 async def upload_weather_tts(weather_id: int, file: UploadFile, db: Session = Depends(get_db)):
-    w = db.query(Weather).get(weather_id)
+    w = db.get(Weather,weather_id)
     if not w:
         raise HTTPException(404, "Weather not found")
     audio_dir = Path(settings.upload_dir) / "weather"
@@ -149,7 +149,7 @@ async def upload_weather_tts(weather_id: int, file: UploadFile, db: Session = De
 
 @router.patch("/{weather_id}")
 def update_weather(weather_id: int, data: WeatherUpdate, db: Session = Depends(get_db)):
-    w = db.query(Weather).get(weather_id)
+    w = db.get(Weather,weather_id)
     if not w:
         raise HTTPException(404, "Weather not found")
     if data.text is not None:
@@ -161,7 +161,7 @@ def update_weather(weather_id: int, data: WeatherUpdate, db: Session = Depends(g
 
 @router.delete("/{weather_id}")
 def delete_weather(weather_id: int, db: Session = Depends(get_db)):
-    w = db.query(Weather).get(weather_id)
+    w = db.get(Weather,weather_id)
     if not w:
         raise HTTPException(404, "Weather not found")
     db.delete(w)

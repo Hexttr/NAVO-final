@@ -298,7 +298,31 @@ sudo systemctl restart navo-radio
 
 ---
 
-## 13. Резюме по секретам
+## 13. Устранение дублей icecast_source
+
+Если на сервере запущено **несколько процессов** icecast_source (проверка: `pgrep -f icecast_source`), это может вызывать конфликты при записи в один Icecast mount.
+
+**Решение:**
+```bash
+# Найти все процессы
+pgrep -af icecast_source
+
+# Остановить все (если используется systemd)
+sudo systemctl stop navo-icecast-source  # или имя вашего сервиса
+
+# Убедиться, что в systemd только один unit для icecast source
+ls /etc/systemd/system/*icecast*
+ls /etc/systemd/system/*navo*
+
+# Запустить один экземпляр
+sudo systemctl start navo-icecast-source
+```
+
+Убедитесь, что icecast source запускается **только одним** unit (не дублируется в разных .service файлах).
+
+---
+
+## 14. Резюме по секретам
 
 | Способ              | Сложность | Безопасность |
 |---------------------|-----------|--------------|

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from models import Song, News, Weather, Podcast, Intro, BroadcastItem
 from services.streamer_service import get_entity_duration_from_file
 from services.settings_service import get_json, get
+from utils.time_utils import time_str, sec_to_hms
 
 
 def _safe_duration(db: Session, entity_type: str, entity_id: int, fallback: float, obj=None) -> float:
@@ -38,17 +39,6 @@ DEFAULT_SLOTS = [
     (21, 0, "news"), (22, 0, "weather"), (23, 0, "podcast"),
 ]
 DEFAULT_INTRO_MINUTE = 55
-
-
-def _time_str(h: int, m: int, s: int = 0) -> str:
-    return f"{h:02d}:{m:02d}:{s:02d}"
-
-
-def _sec_to_hms(sec: int) -> tuple[int, int, int]:
-    h = sec // 3600
-    m = (sec % 3600) // 60
-    s = sec % 60
-    return h, m, s
 
 
 def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]:
