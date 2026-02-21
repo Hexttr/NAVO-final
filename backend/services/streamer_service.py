@@ -3,6 +3,7 @@ Stream broadcast playlist as continuous MP3.
 Синхронизация по московскому времени: воспроизведение с текущего момента эфира.
 """
 import asyncio
+import json
 import subprocess
 import tempfile
 from datetime import date, datetime, timezone, timedelta
@@ -229,12 +230,52 @@ def resolve_broadcast_date(db: Session, requested_date: date) -> date:
     return requested_date
 
 
+def _is_date_explicitly_deleted(db: Session, d: date) -> bool:
+    """Дата в списке явно удалённых — не восстанавливать копированием."""
+    from models import Setting
+    row = db.query(Setting).filter(Setting.key == "deleted_broadcast_dates").first()
+    if not row or not row.value:
+        return False
+    try:
+        dates = json.loads(row.value)
+        return str(d) in (dates if isinstance(dates, list) else [])
+    except (json.JSONDecodeError, TypeError):
+        return False
+
+
+def _mark_broadcast_deleted(db: Session, d: date, deleted: bool) -> None:
+    """Добавить/убрать дату из списка явно удалённых."""
+    from models import Setting
+    row = db.query(Setting).filter(Setting.key == "deleted_broadcast_dates").first()
+    dates = []
+    if row and row.value:
+        try:
+            dates = json.loads(row.value)
+            if not isinstance(dates, list):
+                dates = []
+        except (json.JSONDecodeError, TypeError):
+            dates = []
+    ds = str(d)
+    if deleted:
+        if ds not in dates:
+            dates.append(ds)
+    else:
+        dates = [x for x in dates if x != ds]
+    if row:
+        row.value = json.dumps(dates, ensure_ascii=False)
+    else:
+        db.add(Setting(key="deleted_broadcast_dates", value=json.dumps(dates, ensure_ascii=False)))
+    db.commit()
+
+
 def ensure_broadcast_for_date(db: Session, target_date: date) -> bool:
     """
     Если на target_date нет эфира — копируем с последней даты, где он есть.
-    Продолжаем до бесконечности: пока админ не сформирует эфир, будет копироваться.
+    Не копируем, если дата явно удалена админом (ждём новую генерацию).
     Возвращает True если была копия, False если эфир уже был или нечего копировать.
     """
+    if _is_date_explicitly_deleted(db, target_date):
+        return False
     has_items = (
         db.query(BroadcastItem)
         .filter(

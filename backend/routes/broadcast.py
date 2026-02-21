@@ -311,8 +311,11 @@ def delete_broadcast(
     db: Session = Depends(get_db),
 ):
     """Удалить весь эфир на дату."""
+    from services.streamer_service import _mark_broadcast_deleted
+
     deleted = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).delete()
     db.commit()
+    _mark_broadcast_deleted(db, d, deleted=True)
     return {"date": str(d), "deleted": deleted, "message": "Эфир удалён"}
 
 
@@ -337,6 +340,8 @@ def generate(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
+    from services.streamer_service import _mark_broadcast_deleted
+
     for attempt in range(5):
         try:
             db.rollback()
@@ -344,6 +349,7 @@ def generate(
             for item in items:
                 db.add(item)
             db.commit()
+            _mark_broadcast_deleted(db, d, deleted=False)
             from services.broadcast_service import recalc_broadcast_for_date
             recalc_broadcast_for_date(db, d)
             _spawn_hls_generation(d)
