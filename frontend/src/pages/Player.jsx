@@ -263,6 +263,14 @@ export default function Player() {
 
     let cancelled = false;
 
+    // Apple: iOS — все браузеры используют WebKit. Mac — Safari и др. getByteFrequencyData
+    // возвращает нули для live stream в WebKit. Fallback для всех Apple-устройств.
+    const isApple = /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(navigator.userAgent);
+    if (isApple) {
+      setUseAnalyser(false);
+      return;
+    }
+
     const setupAudioContext = async () => {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
@@ -300,12 +308,23 @@ export default function Player() {
       const dataArray = dataArrayRef.current;
       if (!analyser || !dataArray) return;
 
+      let frameCount = 0;
+      let hadRealData = false;
+      const SAFARI_FALLBACK_FRAMES = 60; // ~1 сек: если нет данных — Safari (getByteFrequencyData=0 для live stream)
+
       const animate = () => {
         if (cancelled) return;
         rafRef.current = requestAnimationFrame(animate);
         if (ctx.state === "suspended") ctx.resume();
         if (ctx.state === "running") {
           analyser.getByteFrequencyData(dataArray);
+          const maxVal = dataArray.length ? Math.max(...dataArray) : 0;
+          if (maxVal > 2) hadRealData = true;
+          frameCount++;
+          if (!hadRealData && frameCount >= SAFARI_FALLBACK_FRAMES) {
+            setUseAnalyser(false);
+            return;
+          }
           const step = Math.floor(dataArray.length / BAR_COUNT);
           const next = Array(BAR_COUNT)
             .fill(0)

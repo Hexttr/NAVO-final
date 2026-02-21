@@ -116,18 +116,24 @@
 }
 
 .equalizer-fallback .equalizer-bar:nth-child(odd) {
-  animation-delay: 0.15s;
+  animation-delay: 0.1s;
 }
 
 .equalizer-fallback .equalizer-bar:nth-child(3n) {
-  animation-delay: 0.3s;
+  animation-delay: 0.25s;
+}
+
+.equalizer-fallback .equalizer-bar:nth-child(4n) {
+  animation-delay: 0.4s;
 }
 
 .equalizer-fallback .equalizer-bar:nth-child(5n) {
-  animation-delay: 0.45s;
+  animation-delay: 0.55s;
 }
 
 @keyframes eq-pulse {
-  0%, 100% { height: 20%; }
-  50% { height: 60%; }
+  0%, 100% { height: 15%; }
+  25% { height: 45%; }
+  50% { height: 70%; }
+  75% { height: 35%; }
 }
