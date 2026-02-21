@@ -26,12 +26,18 @@ from services.tts_service import list_voices
 
 
 def _run_migrations():
-    """Add broadcast_date to news/weather if missing."""
+    """Add broadcast_date and duration_seconds to news/weather if missing."""
     from sqlalchemy import text
-    for table, col in [("news", "broadcast_date"), ("weather", "broadcast_date")]:
+    migrations = [
+        ("news", "broadcast_date", "DATE"),
+        ("weather", "broadcast_date", "DATE"),
+        ("news", "duration_seconds", "REAL"),
+        ("weather", "duration_seconds", "REAL"),
+    ]
+    for table, col, col_type in migrations:
         try:
             with engine.connect() as conn:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} DATE"))
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 conn.commit()
         except Exception:
             pass  # column already exists
