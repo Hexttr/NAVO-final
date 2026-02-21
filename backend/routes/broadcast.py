@@ -133,57 +133,77 @@ def get_now_playing(
     Приоритет: 1) stream_position.json (Icecast source — фактическая позиция), 2) position от клиента (HLS), 3) время сервера."""
     from fastapi.responses import JSONResponse
     from services.streamer_service import moscow_seconds_now
-    from services.stream_position import read_stream_position
     import json
+    import logging
 
-    ensure_broadcast_for_date(db, d)
-    broadcast_date = d
-    stream_pos = read_stream_position()
-    if stream_pos is not None:
-        now_sec = stream_pos
-    elif position is not None and position >= 0:
-        now_sec = float(position)
-    else:
-        now_sec = moscow_seconds_now()
-    h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
-    current_time = f"{h:02d}:{m:02d}:{s:02d}"
+    logger = logging.getLogger(__name__)
+    empty_fallback = {"entityType": None, "entityId": None, "currentTime": "00:00:00", "title": None}
+    cache_headers = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
 
-    items = (
-        db.query(BroadcastItem)
-        .filter(
-            BroadcastItem.broadcast_date == broadcast_date,
-            BroadcastItem.entity_type != "empty",
-        )
-        .order_by(BroadcastItem.sort_order)
-        .all()
-    )
-    empty = {"entityType": None, "entityId": None, "currentTime": current_time, "title": None}
-    if not items:
-        return JSONResponse(content=empty, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
-    for it in items:
-        parts = (it.start_time or "00:00:00").split(":")
-        start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
-        end_sec = start_sec + float(it.duration_seconds or 0)
-        if start_sec <= now_sec < end_sec:
-            title = None
-            if it.metadata_json:
-                try:
-                    meta = json.loads(it.metadata_json)
-                    title = meta.get("title", "")
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            if not title:
-                title = get_entity_meta(db, it.entity_type, it.entity_id)
-            return JSONResponse(
-                content={
-                    "entityType": it.entity_type,
-                    "entityId": it.entity_id,
-                    "currentTime": current_time,
-                    "title": title or "—",
-                },
-                headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    try:
+        ensure_broadcast_for_date(db, d)
+        broadcast_date = d
+
+        stream_pos = None
+        try:
+            from services.stream_position import read_stream_position
+            stream_pos = read_stream_position()
+        except Exception as e:
+            logger.warning("read_stream_position failed: %s", e)
+
+        if stream_pos is not None:
+            now_sec = float(stream_pos)
+        elif position is not None and position >= 0:
+            now_sec = float(position)
+        else:
+            now_sec = moscow_seconds_now()
+
+        now_sec = max(0, min(86400, now_sec))
+        h, m, s = int(now_sec) // 3600, (int(now_sec) % 3600) // 60, int(now_sec) % 60
+        current_time = f"{h:02d}:{m:02d}:{s:02d}"
+
+        items = (
+            db.query(BroadcastItem)
+            .filter(
+                BroadcastItem.broadcast_date == broadcast_date,
+                BroadcastItem.entity_type != "empty",
             )
-    return JSONResponse(content=empty, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})
+            .order_by(BroadcastItem.sort_order)
+            .all()
+        )
+        empty = {"entityType": None, "entityId": None, "currentTime": current_time, "title": None}
+        if not items:
+            return JSONResponse(content=empty, headers=cache_headers)
+        for it in items:
+            parts = (it.start_time or "00:00:00").split(":")
+            start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
+            end_sec = start_sec + float(it.duration_seconds or 0)
+            if start_sec <= now_sec < end_sec:
+                title = None
+                if it.metadata_json:
+                    try:
+                        meta = json.loads(it.metadata_json)
+                        title = meta.get("title", "")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if not title:
+                    try:
+                        title = get_entity_meta(db, it.entity_type, it.entity_id)
+                    except Exception:
+                        title = "—"
+                return JSONResponse(
+                    content={
+                        "entityType": it.entity_type,
+                        "entityId": it.entity_id,
+                        "currentTime": current_time,
+                        "title": title or "—",
+                    },
+                    headers=cache_headers,
+                )
+        return JSONResponse(content=empty, headers=cache_headers)
+    except Exception as e:
+        logger.exception("now-playing error: %s", e)
+        return JSONResponse(content=empty_fallback, headers=cache_headers, status_code=200)
 
 
 def _get_entity_text(db: Session, entity_type: str, entity_id: int) -> str | None:

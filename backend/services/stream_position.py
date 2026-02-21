@@ -13,16 +13,21 @@ STREAM_POSITION_FILE = "stream_position.json"
 MAX_AGE_SEC = 20  # позиция считается устаревшей через 20 сек
 
 
-def _get_path() -> Path:
-    base = PROJECT_ROOT / settings.upload_dir
-    base.mkdir(parents=True, exist_ok=True)
-    return base / STREAM_POSITION_FILE
+def _get_path() -> Path | None:
+    try:
+        base = PROJECT_ROOT / settings.upload_dir
+        base.mkdir(parents=True, exist_ok=True)
+        return base / STREAM_POSITION_FILE
+    except OSError:
+        return None
 
 
 def write_stream_position(position_sec: float) -> None:
     """Записать текущую позицию потока (секунды от полуночи МСК)."""
     try:
         path = _get_path()
+        if path is None:
+            return
         data = {"position_sec": position_sec, "timestamp": time.time()}
         path.write_text(json.dumps(data), encoding="utf-8")
     except OSError:
@@ -36,7 +41,7 @@ def read_stream_position() -> float | None:
     """
     try:
         path = _get_path()
-        if not path.exists():
+        if path is None or not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         ts = data.get("timestamp", 0)
