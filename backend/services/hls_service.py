@@ -68,6 +68,19 @@ def get_hls_path(broadcast_date: date, schedule_hash: str) -> Path:
     return _get_hls_dir() / str(broadcast_date) / schedule_hash
 
 
+def get_hls_stream_duration_sec(m3u8_path: Path) -> float | None:
+    """Сумма длительностей сегментов из m3u8. None если не удалось прочитать."""
+    import re
+    try:
+        text = m3u8_path.read_text(encoding="utf-8")
+        total = 0.0
+        for m in re.finditer(r"#EXTINF:([\d.]+)", text):
+            total += float(m.group(1))
+        return total if total > 0 else None
+    except (OSError, ValueError):
+        return None
+
+
 def generate_hls(db: Session, broadcast_date: date) -> dict:
     """
     Генерирует HLS для даты. Возвращает {ok, url, error, duration_sec}.

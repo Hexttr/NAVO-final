@@ -515,12 +515,24 @@ def hls_url(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """URL HLS если готов, иначе null. startPosition — секунды от полуночи МСК для seek (всегда по серверу)."""
+    """URL HLS если готов, иначе null. startPosition — секунды от полуночи МСК для seek, ограничено длительностью потока."""
     from services.streamer_service import moscow_seconds_now
+    from services.hls_service import get_hls_stream_duration_sec, _get_hls_dir
 
     ensure_broadcast_for_date(db, d)
     url = get_hls_url(db, d)
-    return {"url": url, "hasHls": url is not None, "startPosition": moscow_seconds_now()}
+    now_sec = moscow_seconds_now()
+    start_position = now_sec
+    if url and url.startswith("/hls/"):
+        parts = url.split("/")
+        if len(parts) >= 5:
+            hls_date, hls_hash = parts[2], parts[3]
+            m3u8_path = _get_hls_dir() / hls_date / hls_hash / "stream.m3u8"
+            if m3u8_path.exists():
+                dur = get_hls_stream_duration_sec(m3u8_path)
+                if dur is not None and now_sec > dur:
+                    start_position = max(0, int(dur) - 10)
+    return {"url": url, "hasHls": url is not None, "startPosition": start_position}
 
 
 def _hls_generating_lock_path(d: date) -> Path:

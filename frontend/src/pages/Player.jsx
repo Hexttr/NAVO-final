@@ -83,7 +83,21 @@ export default function Player() {
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
             hls.destroy();
-            playStreamFallback(serverStartSec);
+            if (startSec > 0) {
+              const retry = new Hls({ startPosition: 0 });
+              hlsRef.current = retry;
+              retry.loadSource(hlsUrl);
+              retry.attachMedia(audio);
+              retry.on(Hls.Events.ERROR, (__, d2) => {
+                if (d2.fatal) {
+                  retry.destroy();
+                  playStreamFallback(serverStartSec);
+                }
+              });
+              audio.play().catch(() => {});
+            } else {
+              playStreamFallback(serverStartSec);
+            }
           }
         });
         audio.play().catch((e) => {
