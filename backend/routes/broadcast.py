@@ -428,10 +428,14 @@ def hls_url(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """URL HLS если готов, иначе null. Фронт использует для приоритета HLS над /stream. Если на дату нет эфира — копируется с последнего дня."""
+    """URL HLS если готов, иначе null. startPosition — секунды от полуночи МСК для seek (всегда по серверу)."""
+    from datetime import datetime, timezone, timedelta
+
     ensure_broadcast_for_date(db, d)
     url = get_hls_url(db, d)
-    return {"url": url, "hasHls": url is not None}
+    now = datetime.now(timezone(timedelta(hours=3)))
+    start_position = now.hour * 3600 + now.minute * 60 + now.second
+    return {"url": url, "hasHls": url is not None, "startPosition": start_position}
 
 
 @router.get("/hls-status")

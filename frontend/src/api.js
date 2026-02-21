@@ -328,10 +328,11 @@ export async function getBroadcastPlaylistUrls(date, sync = true) {
   return r.json();
 }
 
+/** Возвращает { url, startPosition }. startPosition — секунды от полуночи МСК (с сервера). */
 export async function getHlsUrl(date) {
   const r = await fetch(`${API}/broadcast/hls-url?d=${date}`);
   const data = await r.json();
-  return data?.url || null;
+  return { url: data?.url || null, startPosition: data?.startPosition ?? null };
 }
 
 /** Подсказка: использовать /stream напрямую при Icecast 404 */
