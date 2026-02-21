@@ -43,8 +43,14 @@ export default function Diagnostics() {
     setLoading(true);
     setError(null);
     getDiagnostics()
-      .then(setData)
-      .catch((e) => setError(e.message))
+      .then((res) => {
+        if (res && typeof res === "object" && "checks" in res) {
+          setData(res);
+        } else {
+          setError("Неверный формат ответа");
+        }
+      })
+      .catch((e) => setError(e.message || "Ошибка загрузки"))
       .finally(() => setLoading(false));
   };
 

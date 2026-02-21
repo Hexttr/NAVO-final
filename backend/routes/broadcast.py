@@ -548,8 +548,12 @@ def hls_url(
             m3u8_path = _get_hls_dir() / hls_date / hls_hash / "stream.m3u8"
             if m3u8_path.exists():
                 dur = get_hls_stream_duration_sec(m3u8_path)
-                if dur is not None and now_sec > dur:
-                    start_position = max(0, int(dur) - 10)
+                if dur is not None:
+                    if now_sec > dur:
+                        start_position = max(0, int(dur) - 10)
+                else:
+                    # Не удалось прочитать длительность — не рискуем seek, начинаем с 0
+                    start_position = 0
     return {"url": url, "hasHls": url is not None, "startPosition": start_position}
 
 

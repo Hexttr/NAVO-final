@@ -89,6 +89,8 @@
 
 ## Деплой
 
+**Проверка диагностики:** `python deploy/check_diagnostics.py` — проверка /api/diagnostics
+
 ```bash
 # Полный деплой (pull, build, restart)
 python deploy/deploy_to_server.py

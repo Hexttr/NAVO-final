@@ -83,7 +83,12 @@ export default function Player() {
           hlsRef.current = null;
         }
         audio.removeAttribute("src");
-        const hls = new Hls({ startPosition: startSec });
+        const hlsConfig = {
+          startPosition: startSec,
+          maxBufferLength: 60,
+          maxMaxBufferLength: 120,
+        };
+        const hls = new Hls(hlsConfig);
         hlsRef.current = hls;
         hls.loadSource(hlsUrl);
         hls.attachMedia(audio);
@@ -91,14 +96,16 @@ export default function Player() {
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
             hls.destroy();
+            hlsRef.current = null;
             if (startSec > 0) {
-              const retry = new Hls({ startPosition: 0 });
+              const retry = new Hls({ ...hlsConfig, startPosition: 0 });
               hlsRef.current = retry;
               retry.loadSource(hlsUrl);
               retry.attachMedia(audio);
               retry.on(Hls.Events.ERROR, (__, d2) => {
                 if (d2.fatal) {
                   retry.destroy();
+                  hlsRef.current = null;
                   playStreamFallback(serverStartSec);
                 }
               });
