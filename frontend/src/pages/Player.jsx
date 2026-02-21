@@ -34,11 +34,12 @@ export default function Player() {
   const rafRef = useRef(null);
   const retryCountRef = useRef(0);
   const positionGetterRef = useRef(null);
+  const metadataRef = useRef(null); // { tracks: [{start,end,title}] } — привязка к реальной позиции в HLS
 
   const playStream = async () => {
     if (!audioRef.current) return;
     const today = moscowDateStr();
-    const { url: hlsUrl, startPosition: serverStartSec } = await getHlsUrl(today);
+    let { url: hlsUrl, startPosition: serverStartSec } = await getHlsUrl(today);
     const audio = audioRef.current;
     const startSec = serverStartSec != null ? serverStartSec : moscowSecondsNow();
 
@@ -60,6 +61,14 @@ export default function Player() {
     }
 
     if (hlsUrl) {
+      metadataRef.current = null;
+      const metadataUrl = hlsUrl.replace(/stream\.m3u8$/, "metadata.json");
+      fetch(metadataUrl.startsWith("http") ? metadataUrl : window.location.origin + metadataUrl)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.tracks?.length) metadataRef.current = data;
+        })
+        .catch(() => {});
       if (Hls.isSupported()) {
         if (hlsRef.current) {
           hlsRef.current.destroy();
@@ -105,6 +114,7 @@ export default function Player() {
 
   const playStreamFallback = (serverStartSec) => {
     if (!audioRef.current) return;
+    metadataRef.current = null;
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -165,6 +175,12 @@ export default function Player() {
   useEffect(() => {
     const poll = () => {
       const pos = positionGetterRef.current?.();
+      const meta = metadataRef.current;
+      if (meta?.tracks?.length && pos != null && pos >= 0) {
+        const t = meta.tracks.find((tr) => pos >= tr.start && pos < tr.end);
+        setNowPlayingTitle(t?.title ?? null);
+        return;
+      }
       getBroadcastNowPlaying(moscowDateStr(), pos)
         .then((r) => setNowPlayingTitle(r?.title || null))
         .catch(() => setNowPlayingTitle(null));

@@ -1,7 +1,9 @@
 """
 HLS generation for broadcast. Concat + re-encode → segments.
 Единый формат, без обрезки треков, совпадение с расписанием.
+Генерирует metadata.json — привязка «Сейчас играет» к реальной позиции в потоке.
 """
+import json
 import subprocess
 import tempfile
 from datetime import date, timedelta
@@ -15,13 +17,45 @@ from services.streamer_service import (
     get_broadcast_schedule_hash,
     _create_concat_file,
 )
+from services.broadcast_service import get_entity_meta
+from models import BroadcastItem
 
 
 HLS_DIR = "hls"
 HLS_SEGMENT_DURATION = 10  # секунд на сегмент
 
+# Базовое время для EXT-X-DATERANGE (ISO 8601)
+_DATERANGE_BASE = "2026-02-21T00:00:00Z"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _inject_daterange_into_m3u8(m3u8_path: Path, tracks: list[dict]) -> None:
+    """
+    Вставляет #EXT-X-DATERANGE с X-TITLE перед сегментами, где начинаются треки.
+    hls.js мапит DATERANGE в TextTrack cues — фронт слушает cuechange.
+    """
+    import re
+    text = m3u8_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    out = []
+    cum_sec = 0.0
+    track_idx = 0
+    for line in lines:
+        m = re.match(r"#EXTINF:([\d.]+)", line)
+        if m:
+            dur = float(m.group(1))
+            # Треки, чей start попадает в этот сегмент [cum_sec, cum_sec+dur)
+            while track_idx < len(tracks) and cum_sec <= tracks[track_idx]["start"] < cum_sec + dur:
+                t = tracks[track_idx]
+                title = (t.get("title") or "—").replace('"', "'").replace("\\", "/")
+                h, m_, s = int(t["start"] // 3600), int((t["start"] % 3600) // 60), int(t["start"] % 60)
+                iso = f"2026-02-21T{h:02d}:{m_:02d}:{s:02d}Z"
+                out.append(f'#EXT-X-DATERANGE:ID="track-{track_idx}",START-DATE="{iso}",CLASS="song",X-TITLE="{title}"')
+                track_idx += 1
+            cum_sec += dur
+        out.append(line)
+    m3u8_path.write_text("\n".join(out), encoding="utf-8")
 
 
 def _get_hls_dir() -> Path:
@@ -89,6 +123,38 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
 
     if not m3u8_path.exists():
         return {"ok": False, "error": "m3u8 не создан"}
+
+    # metadata.json — привязка позиции в потоке к названию (для «Сейчас играет»)
+    items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == broadcast_date,
+            BroadcastItem.entity_type != "empty",
+        )
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    tracks = []
+    for it in items:
+        parts = (it.start_time or "00:00:00").split(":")
+        start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
+        dur = float(it.duration_seconds or 0)
+        end_sec = start_sec + dur
+        title = None
+        if it.metadata_json:
+            try:
+                meta = json.loads(it.metadata_json)
+                title = meta.get("title", "")
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not title:
+            title = get_entity_meta(db, it.entity_type, it.entity_id)
+        tracks.append({"start": start_sec, "end": end_sec, "title": title or "—"})
+    metadata_path = out_dir / "metadata.json"
+    metadata_path.write_text(json.dumps({"tracks": tracks}, ensure_ascii=False, indent=0), encoding="utf-8")
+
+    # EXT-X-DATERANGE в m3u8 — timed metadata для «Сейчас играет» (hls.js → TextTrack → cuechange)
+    _inject_daterange_into_m3u8(m3u8_path, tracks)
 
     # URL для фронта (относительный, nginx раздаёт /hls/)
     url = f"/hls/{broadcast_date}/{schedule_hash}/stream.m3u8"

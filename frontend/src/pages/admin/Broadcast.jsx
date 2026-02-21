@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2, ChevronDown, ChevronUp, Loader2, Calculator } from "lucide-react";
+import Hls from "hls.js";
 import {
   moscowDateStr,
   getBroadcast,
   getBroadcastNowPlaying,
+  getHlsUrl,
   generateBroadcast,
   deleteBroadcast,
   generateHls,
@@ -99,6 +101,9 @@ export default function Broadcast() {
   const [playingItemId, setPlayingItemId] = useState(null);
   const [gridExpanded, setGridExpanded] = useState(false);
   const [, setTimeTick] = useState(0);
+  const hlsSyncRef = useRef(null);
+  const syncAudioRef = useRef(null);
+  const positionGetterRef = useRef(null);
 
   const VISIBLE_ROWS = 11;
 
@@ -155,15 +160,82 @@ export default function Broadcast() {
     const today = moscowDateStr();
     if (selectedDate !== today) {
       setNowPlaying({ entityType: null, entityId: null, currentTime: null });
+      positionGetterRef.current = null;
       return;
     }
     const poll = () => {
-      getBroadcastNowPlaying(selectedDate).then(setNowPlaying).catch(() => {});
+      const pos = positionGetterRef.current?.();
+      if (pos != null && pos >= 0 && data?.items?.length) {
+        const parseTimeToSeconds = (timeStr) => {
+          if (!timeStr) return 0;
+          const parts = String(timeStr).split(":").map(Number);
+          return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+        };
+        for (const item of data.items) {
+          if (item.entity_type === "empty") continue;
+          const start = parseTimeToSeconds(item.start_time);
+          const end = start + (item.duration_seconds || 0);
+          if (pos >= start && pos < end) {
+            const h = Math.floor(pos / 3600);
+            const m = Math.floor((pos % 3600) / 60);
+            const s = Math.floor(pos % 60);
+            setNowPlaying({
+              entityType: item.entity_type,
+              entityId: item.entity_id,
+              currentTime: `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`,
+            });
+            return;
+          }
+        }
+      }
+      getBroadcastNowPlaying(selectedDate, pos).then(setNowPlaying).catch(() => {});
     };
     poll();
     const id = setInterval(poll, 1000);
     return () => clearInterval(id);
-  }, [selectedDate, minuteTick]);
+  }, [selectedDate, minuteTick, data?.items]);
+
+  useEffect(() => {
+    const today = moscowDateStr();
+    if (selectedDate !== today || !data?.items?.length) {
+      if (hlsSyncRef.current) {
+        hlsSyncRef.current.destroy();
+        hlsSyncRef.current = null;
+      }
+      positionGetterRef.current = null;
+      return;
+    }
+    let mounted = true;
+    getHlsUrl(today).then(({ url: hlsUrl, startPosition }) => {
+      if (!mounted || !hlsUrl || !Hls.isSupported()) {
+        positionGetterRef.current = null;
+        return;
+      }
+      const audio = document.createElement("audio");
+      audio.muted = true;
+      audio.preload = "none";
+      syncAudioRef.current = audio;
+      const startSec = startPosition ?? (() => {
+        const d = new Date(Date.now() + 3 * 3600 * 1000);
+        return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+      })();
+      const hls = new Hls({ startPosition: startSec });
+      hlsSyncRef.current = hls;
+      hls.loadSource(hlsUrl.startsWith("http") ? hlsUrl : window.location.origin + hlsUrl);
+      hls.attachMedia(audio);
+      positionGetterRef.current = () => audio.currentTime ?? 0;
+      audio.play().catch(() => {});
+    });
+    return () => {
+      mounted = false;
+      if (hlsSyncRef.current) {
+        hlsSyncRef.current.destroy();
+        hlsSyncRef.current = null;
+      }
+      syncAudioRef.current = null;
+      positionGetterRef.current = null;
+    };
+  }, [selectedDate, data?.items?.length]);
 
   useEffect(() => {
     getTtsVoices().then((r) => {
