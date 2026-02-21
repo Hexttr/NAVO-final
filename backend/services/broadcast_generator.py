@@ -13,17 +13,17 @@ from services.streamer_service import get_entity_duration_from_file
 from services.settings_service import get_json, get
 
 
-def _safe_duration(db: Session, entity_type: str, entity_id: int, fallback: float, obj=None) -> int:
-    """Получить длительность из файла; при ошибке — из объекта или fallback."""
+def _safe_duration(db: Session, entity_type: str, entity_id: int, fallback: float, obj=None) -> float:
+    """Получить длительность из файла (ffprobe); при ошибке — из объекта или fallback."""
     try:
         d = get_entity_duration_from_file(db, entity_type, entity_id)
         if d and d > 0:
-            return int(d)
+            return round(d, 1)
     except Exception:
         pass
     if obj is not None and getattr(obj, "duration_seconds", None):
-        return int(obj.duration_seconds)
-    return int(fallback)
+        return round(float(obj.duration_seconds), 1)
+    return round(float(fallback), 1)
 
 
 def _safe_str(val, default: str = "—") -> str:
@@ -154,7 +154,7 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         nonlocal current_sec
         for _ in range(len(songs)):
             s = next_song()
-            dj = 45 if getattr(s, "dj_audio_path", None) else 0
+            dj = _safe_duration(db, "dj", s.id, 45, None) if getattr(s, "dj_audio_path", None) else 0.0
             dur = _safe_duration(db, "song", s.id, 180, s)
             total = dj + dur
             if total <= remaining_sec:

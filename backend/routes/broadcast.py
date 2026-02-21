@@ -255,6 +255,8 @@ def generate(
             for item in items:
                 db.add(item)
             db.commit()
+            from services.broadcast_service import recalc_broadcast_for_date
+            recalc_broadcast_for_date(db, d)
             _spawn_hls_generation(d)
             return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~10-30 мин)."}
         except ValueError as e:

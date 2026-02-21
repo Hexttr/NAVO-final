@@ -61,7 +61,8 @@ def get_entity_duration(db: Session, entity_type: str, entity_id: int) -> float:
         s = db.query(Song).filter(Song.id == entity_id, Song.dj_audio_path != "").first()
         if not s:
             raise ValueError("Song with DJ audio not found")
-        return 45.0
+        dur = get_entity_duration_from_file(db, "dj", entity_id)
+        return dur if dur > 0 else 45.0
     if entity_type == "news":
         n = db.query(News).filter(News.id == entity_id, News.audio_path != "").first()
         if not n:
