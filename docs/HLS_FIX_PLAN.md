@@ -35,6 +35,12 @@ Cron на 02:00 — генерировать HLS на сегодня:
 0 2 * * * cd /opt/navo-radio/backend && python run_hls.py $(date +\%Y-\%m-\%d) >> /opt/navo-radio/uploads/hls_cron.log 2>&1
 ```
 
-## Почему /stream обрезает
+## /stream с FFmpeg concat (бесшовный, без предгенерации)
 
-`/stream` использует `stream_broadcast_async` — конкатенация файлов без реэнкода. На стыках разных битрейтов/форматов возможны щелчки и обрезки. HLS через FFmpeg concat + AAC даёт единый формат и бесшовные переходы.
+С 2026-02-21 `/stream` использует `stream_broadcast_ffmpeg_concat` — один FFmpeg, concat + реэнкод. Бесшовные переходы без HLS. Первый чанк может занять 20–40 сек (создание concat).
+
+**«Сейчас играет»:** Позиция = `startSec + elapsed` (startSec с сервера при подключении). Метаданные из API `playlist-metadata`. Точность ±несколько секунд, достаточна для отображения текущего трека.
+
+## Почему раньше /stream обрезал
+
+`stream_broadcast_async` — конкатенация без реэнкода. На стыках разных битрейтов — щелчки. FFmpeg concat + реэнкод даёт единый формат.
