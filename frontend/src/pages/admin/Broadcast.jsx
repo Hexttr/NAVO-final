@@ -104,6 +104,7 @@ export default function Broadcast() {
   const hlsSyncRef = useRef(null);
   const syncAudioRef = useRef(null);
   const positionGetterRef = useRef(null);
+  const hlsStartPositionRef = useRef(null);
 
   const VISIBLE_ROWS = 11;
 
@@ -161,10 +162,15 @@ export default function Broadcast() {
     if (selectedDate !== today) {
       setNowPlaying({ entityType: null, entityId: null, currentTime: null });
       positionGetterRef.current = null;
+      hlsStartPositionRef.current = null;
       return;
     }
     const poll = () => {
-      const pos = positionGetterRef.current?.();
+      let pos = positionGetterRef.current?.();
+      const startPos = hlsStartPositionRef.current;
+      if (pos != null && startPos != null && startPos > 3600 && pos < 3600) {
+        pos = startPos + pos;
+      }
       if (pos != null && pos >= 0 && data?.items?.length) {
         const parseTimeToSeconds = (timeStr) => {
           if (!timeStr) return 0;
@@ -203,12 +209,14 @@ export default function Broadcast() {
         hlsSyncRef.current = null;
       }
       positionGetterRef.current = null;
+      hlsStartPositionRef.current = null;
       return;
     }
     let mounted = true;
     getHlsUrl(today).then(({ url: hlsUrl, startPosition }) => {
       if (!mounted || !hlsUrl || !Hls.isSupported()) {
         positionGetterRef.current = null;
+        hlsStartPositionRef.current = null;
         return;
       }
       const audio = document.createElement("audio");
@@ -219,6 +227,7 @@ export default function Broadcast() {
         const d = new Date(Date.now() + 3 * 3600 * 1000);
         return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
       })();
+      hlsStartPositionRef.current = startSec;
       const hls = new Hls({ startPosition: startSec });
       hlsSyncRef.current = hls;
       hls.loadSource(hlsUrl.startsWith("http") ? hlsUrl : window.location.origin + hlsUrl);
@@ -234,6 +243,7 @@ export default function Broadcast() {
       }
       syncAudioRef.current = null;
       positionGetterRef.current = null;
+      hlsStartPositionRef.current = null;
     };
   }, [selectedDate, data?.items?.length]);
 
