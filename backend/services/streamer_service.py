@@ -551,16 +551,11 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
         return
     now_sec = moscow_seconds_now() if sync_to_moscow else 0
     start_idx, seek_sec = _find_current_position(playlist, now_sec)
-    # Seek = сумма длительностей ВСЕХ элементов до start_idx (path=None = из playlist)
+    # Seek = сумма длительностей до start_idx. Используем dur из плейлиста — ffprobe для 300+ файлов = 1–2 мин задержки.
     total_seek = 0.0
-    loop = asyncio.get_event_loop()
     for i in range(start_idx):
-        path, _, dur = playlist[i][0], playlist[i][1], playlist[i][2]
-        if path is not None and path.exists():
-            d = await loop.run_in_executor(None, _get_file_duration_sec, path)
-            total_seek += d if d > 0 else float(dur or 0)
-        else:
-            total_seek += float(dur or 0)
+        _, _, dur = playlist[i][0], playlist[i][1], playlist[i][2]
+        total_seek += float(dur or 0)
     if start_idx < len(playlist):
         item_path = playlist[start_idx][0]
         if item_path is not None and item_path.exists():
