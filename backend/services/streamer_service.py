@@ -472,10 +472,11 @@ def _path_for_concat(p: Path) -> str:
     return str(p.resolve()).replace("\\", "/").replace("'", "'\\''")
 
 
-def _create_concat_file(playlist: list[tuple]) -> Path | None:
+def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None) -> Path | None:
     """
     Создаёт concat-файл для FFmpeg. path=None → реальный файл тишины (duration в ffconcat ненадёжна).
     Повторяем плейлист 2 раза для бесшовного перехода в полночь.
+    out_dir: если задан — создаём файл там (надёжнее чем /tmp при фоновых процессах).
     """
     lines = ["ffconcat version 1.0", ""]
     has_any = False
@@ -498,6 +499,11 @@ def _create_concat_file(playlist: list[tuple]) -> Path | None:
             silence_path = _get_or_create_silence_mp3(int(dur))
             if silence_path and silence_path.exists():
                 lines.append(f"file '{_path_for_concat(silence_path)}'")
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        concat_path = out_dir / "concat.list"
+        concat_path.write_text("\n".join(lines), encoding="utf-8")
+        return concat_path
     fd, p = tempfile.mkstemp(suffix=".concat", prefix="navo_")
     with open(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))

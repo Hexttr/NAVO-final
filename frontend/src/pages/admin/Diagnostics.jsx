@@ -113,7 +113,7 @@ export default function Diagnostics() {
             <div className="diagnostics-card-title">HLS</div>
             <ul className="diagnostics-list">
               <li>
-                <StatusBadge ok={checks.hls_ready} label="HLS готов" />
+                <StatusBadge ok={checks.hls_ready} label={checks.hls_ready ? "HLS готов" : "HLS не готов"} />
               </li>
               {checks.hls_url && (
                 <li className="diag-url" title={checks.hls_url}>
@@ -132,7 +132,7 @@ export default function Diagnostics() {
             <div className="diagnostics-card-title">Stream / Icecast</div>
             <ul className="diagnostics-list">
               <li>
-                <StatusBadge ok={checks.stream_ready} label="Stream готов" />
+                <StatusBadge ok={checks.stream_ready} label={checks.stream_ready ? "Stream готов" : "Stream не готов"} />
               </li>
               <li>
                 Icecast /live:{" "}

@@ -55,7 +55,7 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
     segment_pattern = str(out_dir / "seg_%04d.ts")
 
     _log(f"Creating concat for {len(playlist)} items (may take a few min)...")
-    concat_path = _create_concat_file(playlist)
+    concat_path = _create_concat_file(playlist, out_dir=out_dir)
     if not concat_path or not concat_path.exists():
         return {"ok": False, "error": "Не удалось создать concat (нет файлов)"}
 
