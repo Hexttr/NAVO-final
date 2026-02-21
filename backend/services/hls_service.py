@@ -117,14 +117,16 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
         str(m3u8_path),
     ]
 
-    _log("Running ffmpeg (10-30 min for full day)...")
+    # 877 слотов × ~100 сек ≈ 24 ч. FFmpeg ~20–40× быстрее → 40–70 мин. Таймаут 2 ч.
+    HLS_TIMEOUT = 7200
+    _log(f"Running ffmpeg (40–70 мин для суток, timeout={HLS_TIMEOUT//60} мин)...")
     try:
-        r = subprocess.run(args, capture_output=True, timeout=3600, check=False)
+        r = subprocess.run(args, capture_output=True, timeout=HLS_TIMEOUT, check=False)
         if r.returncode != 0:
             err = (r.stderr or b"").decode(errors="replace")[-1000:]
             return {"ok": False, "error": f"FFmpeg: {err}"}
     except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "Таймаут генерации (>1ч)"}
+        return {"ok": False, "error": f"Таймаут генерации (>{HLS_TIMEOUT//60} мин)"}
     except FileNotFoundError:
         return {"ok": False, "error": "FFmpeg не найден"}
     finally:
