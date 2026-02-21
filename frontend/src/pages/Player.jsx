@@ -26,6 +26,7 @@ export default function Player() {
   const [nowPlayingTitle, setNowPlayingTitle] = useState(null);
   const [barHeights, setBarHeights] = useState(() => Array(BAR_COUNT).fill(15));
   const [useAnalyser, setUseAnalyser] = useState(false);
+  const [audioReady, setAudioReady] = useState(false); // true когда audio реально играет (onPlay) — для Safari
   const audioRef = useRef(null);
   const hlsRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -192,6 +193,7 @@ export default function Player() {
     retryCountRef.current = 0;
     unlockAudioContext();
     if (playing) {
+      setAudioReady(false);
       positionGetterRef.current = null;
       useStreamFallbackRef.current = false;
       hlsStartPositionRef.current = null;
@@ -246,7 +248,7 @@ export default function Player() {
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!playing || !audio?.src) return;
+    if (!playing || !audioReady || !audio?.src) return;
 
     try {
       const audioOrigin = new URL(audio.src, window.location.href).origin;
@@ -259,7 +261,9 @@ export default function Player() {
       return;
     }
 
-    const setupAudioContext = () => {
+    let cancelled = false;
+
+    const setupAudioContext = async () => {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
 
@@ -268,7 +272,10 @@ export default function Player() {
         ctx = new AudioContextClass();
         audioContextRef.current = ctx;
       }
-      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+      if (cancelled) return;
 
       if (!sourceRef.current) {
         try {
@@ -294,17 +301,21 @@ export default function Player() {
       if (!analyser || !dataArray) return;
 
       const animate = () => {
+        if (cancelled) return;
         rafRef.current = requestAnimationFrame(animate);
-        analyser.getByteFrequencyData(dataArray);
-        const step = Math.floor(dataArray.length / BAR_COUNT);
-        const next = Array(BAR_COUNT)
-          .fill(0)
-          .map((_, i) => {
-            const idx = Math.min(i * step, dataArray.length - 1);
-            const v = dataArray[idx] || 0;
-            return Math.max(8, Math.min(80, 8 + (v / 255) * 72));
-          });
-        setBarHeights(next);
+        if (ctx.state === "suspended") ctx.resume();
+        if (ctx.state === "running") {
+          analyser.getByteFrequencyData(dataArray);
+          const step = Math.floor(dataArray.length / BAR_COUNT);
+          const next = Array(BAR_COUNT)
+            .fill(0)
+            .map((_, i) => {
+              const idx = Math.min(i * step, dataArray.length - 1);
+              const v = dataArray[idx] || 0;
+              return Math.max(8, Math.min(80, 8 + (v / 255) * 72));
+            });
+          setBarHeights(next);
+        }
       };
       setUseAnalyser(true);
       animate();
@@ -312,10 +323,20 @@ export default function Player() {
 
     setupAudioContext();
 
+    const onVisibilityChange = () => {
+      const ctx = audioContextRef.current;
+      if (document.visibilityState === "visible" && ctx?.state === "suspended") {
+        ctx.resume();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [playing]);
+  }, [playing, audioReady]);
 
   return (
     <div className="player-page">
@@ -356,11 +377,15 @@ export default function Player() {
         preload="none"
         onPlay={() => {
           setPlaying(true);
+          setAudioReady(true);
           setLoading(false);
           setError(null);
           retryCountRef.current = 0;
         }}
-        onPause={() => setPlaying(false)}
+        onPause={() => {
+          setPlaying(false);
+          setAudioReady(false);
+        }}
         onError={handleAudioError}
         onWaiting={() => setLoading(true)}
         onCanPlay={() => setLoading(false)}
