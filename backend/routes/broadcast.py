@@ -541,6 +541,7 @@ def hls_url(
     url = get_hls_url(db, d)
     now_sec = moscow_seconds_now()
     start_position = now_sec
+    hls_duration_sec = None
     if url and url.startswith("/hls/"):
         parts = url.split("/")
         if len(parts) >= 5:
@@ -549,6 +550,7 @@ def hls_url(
             if m3u8_path.exists():
                 dur = get_hls_stream_duration_sec(m3u8_path)
                 if dur is not None:
+                    hls_duration_sec = round(dur, 1)
                     if now_sec > dur:
                         start_position = max(0, int(dur) - 10)
                     # HLS закончится через <60 сек — лучше сразу /stream (бесконечный)
@@ -556,7 +558,7 @@ def hls_url(
                         url = None
                 else:
                     start_position = 0
-    return {"url": url, "hasHls": url is not None, "startPosition": start_position}
+    return {"url": url, "hasHls": url is not None, "startPosition": start_position, "hlsDurationSec": hls_duration_sec}
 
 
 def _hls_generating_lock_path(d: date) -> Path:
