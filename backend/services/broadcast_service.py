@@ -142,7 +142,7 @@ def recalc_all_durations(db: Session) -> dict:
             if dur > 0 and (not item.duration_seconds or abs(item.duration_seconds - dur) > 0.5):
                 item.duration_seconds = round(dur, 1)
                 updated["broadcast_items"] += 1
-        except ValueError:
+        except Exception:
             pass
     db.commit()
     dates = {r[0] for r in db.query(BroadcastItem.broadcast_date).distinct().all()}

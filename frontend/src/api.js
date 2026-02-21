@@ -384,11 +384,12 @@ export async function generateBroadcast(date) {
 
 export async function recalcBroadcastDurations() {
   const r = await fetch(`${API}/broadcast/recalc-durations`, { method: "POST" });
+  const data = await r.json().catch(() => ({}));
   if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error(err.detail || "Ошибка");
+    const msg = Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail;
+    throw new Error(msg || `Ошибка ${r.status}`);
   }
-  return r.json();
+  return data;
 }
 
 export async function deleteBroadcastItem(itemId, date) {

@@ -238,9 +238,15 @@ def recalc_all_durations(db: Session = Depends(get_db)):
     """Пересчитать длительность всех аудио из файлов (ffprobe). Обновляет сущности и BroadcastItem — точное совпадение админки и эфира."""
     from services.broadcast_service import recalc_all_durations as recalc_svc
 
-    updated = recalc_svc(db)
-    total = sum(updated.values())
-    return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро, {updated['news']} новостей, {updated['weather']} погод, {updated['broadcast_items']} слотов эфира"}
+    try:
+        updated = recalc_svc(db)
+        total = sum(updated.values())
+        return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро, {updated['news']} новостей, {updated['weather']} погод, {updated['broadcast_items']} слотов эфира"}
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, str(e)[:200])
 
 
 @router.post("/generate")
