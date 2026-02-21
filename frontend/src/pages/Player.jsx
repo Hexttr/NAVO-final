@@ -337,8 +337,8 @@ export default function Player() {
         {playing ? "Слушайте эфир" : "Нажмите Play для прослушивания"}
       </p>
       {error && <p className="player-error">{error}</p>}
-      {nowPlayingTitle && (
-        <p className="player-now-playing">Сейчас играет: {nowPlayingTitle}</p>
+      {playing && (
+        <p className="player-now-playing">Сейчас в эфире: {nowPlayingTitle || "—"}</p>
       )}
       {playing && (
         <div className={`equalizer ${!useAnalyser ? "equalizer-fallback" : ""}`} aria-hidden>
