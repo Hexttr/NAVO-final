@@ -105,6 +105,7 @@ export default function Broadcast() {
   const syncAudioRef = useRef(null);
   const positionGetterRef = useRef(null);
   const hlsStartPositionRef = useRef(null);
+  const lastPosRef = useRef({ pos: null, at: 0 });
 
   const VISIBLE_ROWS = 11;
 
@@ -163,6 +164,7 @@ export default function Broadcast() {
       setNowPlaying({ entityType: null, entityId: null, currentTime: null });
       positionGetterRef.current = null;
       hlsStartPositionRef.current = null;
+      lastPosRef.current = { pos: null, at: 0 };
       return;
     }
     const poll = () => {
@@ -170,6 +172,12 @@ export default function Broadcast() {
       const startPos = hlsStartPositionRef.current;
       if (pos != null && startPos != null && startPos > 3600 && pos < 3600) {
         pos = startPos + pos;
+      }
+      const now = Date.now();
+      if (pos != null && lastPosRef.current.pos === pos && now - lastPosRef.current.at > 3000) {
+        pos = null;
+      } else if (pos != null) {
+        lastPosRef.current = { pos, at: now };
       }
       if (pos != null && pos >= 0 && data?.items?.length) {
         const parseTimeToSeconds = (timeStr) => {
