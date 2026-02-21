@@ -551,8 +551,10 @@ def hls_url(
                 if dur is not None:
                     if now_sec > dur:
                         start_position = max(0, int(dur) - 10)
+                    # HLS закончится через <60 сек — лучше сразу /stream (бесконечный)
+                    if now_sec > dur - 60:
+                        url = None
                 else:
-                    # Не удалось прочитать длительность — не рискуем seek, начинаем с 0
                     start_position = 0
     return {"url": url, "hasHls": url is not None, "startPosition": start_position}
 
