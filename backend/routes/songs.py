@@ -14,6 +14,7 @@ from config import settings
 from services.jamendo import JamendoService, search_tracks, download_track
 from services.llm_service import generate_dj_text
 from services.tts_service import text_to_speech
+from services.streamer_service import get_entity_duration_from_file
 
 router = APIRouter(prefix="/songs", tags=["songs"])
 
@@ -124,7 +125,9 @@ async def generate_from_jamendo(db: Session = Depends(get_db)):
             path = UPLOAD_DIR / f"{song.id}_{uuid.uuid4().hex}.mp3"
             await download_track(url, path)
             song.file_path = str(path)
-            song.duration_seconds = float(t.get("duration", 0))
+            # Длительность из файла (ffprobe) — API Jamendo может давать неточные значения
+            dur = get_entity_duration_from_file(db, "song", song.id)
+            song.duration_seconds = round(dur, 1) if dur > 0 else float(t.get("duration", 0))
             db.commit()
             created.append({"id": song.id, "title": title, "artist": artist})
         except Exception as e:
@@ -162,7 +165,8 @@ async def generate_from_jamendo_stream(db: Session = Depends(get_db)):
                     path = UPLOAD_DIR / f"{song.id}_{uuid.uuid4().hex}.mp3"
                     await download_track(url, path)
                     song.file_path = str(path)
-                    song.duration_seconds = float(t.get("duration", 0))
+                    dur = get_entity_duration_from_file(db, "song", song.id)
+                    song.duration_seconds = round(dur, 1) if dur > 0 else float(t.get("duration", 0))
                     db.commit()
                     created += 1
                 except Exception:
