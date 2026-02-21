@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from database import get_db
 from services.streamer_service import get_playlist_with_times, ensure_broadcast_for_date, stream_broadcast_ffmpeg_concat
+from services.stream_position import write_stream_position
 
 from database import engine, Base, get_db
 from routes import (
@@ -213,7 +214,7 @@ async def stream_audio(
     if not playlist:
         raise HTTPException(404, "Нет эфира на эту дату. Сгенерируйте сетку в админке.")
     return StreamingResponse(
-        stream_broadcast_ffmpeg_concat(playlist, sync_to_moscow=not from_start),
+        stream_broadcast_ffmpeg_concat(playlist, sync_to_moscow=not from_start, on_position=write_stream_position),
         media_type="audio/mpeg",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",

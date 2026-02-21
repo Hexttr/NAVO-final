@@ -6,6 +6,7 @@ import asyncio
 import json
 import subprocess
 import tempfile
+import time
 from datetime import date, datetime, timezone, timedelta
 
 from pathlib import Path
@@ -540,10 +541,11 @@ def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None) -> P
     return Path(p)
 
 
-async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: bool = True):
+async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: bool = True, on_position=None):
     """
     Один FFmpeg с concat + реэнкод 128k — единый формат, без обрывов при смене треков.
     Критично для Icecast: пауза >1 сек вызывает отключение источника.
+    on_position: callback(position_sec) — вызывается каждые 2 сек для синхронизации «Сейчас играет».
     """
     if not playlist:
         return
@@ -589,12 +591,21 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        stream_start = time.time()
+        last_position_write = 0.0
         try:
             while True:
                 chunk = await proc.stdout.read(chunk_size)
                 if not chunk:
                     break
                 yield chunk
+                if on_position and (time.time() - last_position_write) >= 2.0:
+                    pos = total_seek + (time.time() - stream_start)
+                    try:
+                        on_position(pos)
+                    except Exception:
+                        pass
+                    last_position_write = time.time()
         finally:
             err = await proc.stderr.read()
             if err:

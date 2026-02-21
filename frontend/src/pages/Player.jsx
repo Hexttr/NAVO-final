@@ -35,6 +35,8 @@ export default function Player() {
   const retryCountRef = useRef(0);
   const positionGetterRef = useRef(null);
   const metadataRef = useRef(null); // { tracks: [{start,end,title}] } — привязка к реальной позиции в HLS
+  const hlsStartPositionRef = useRef(null); // HLS: секунды от полуночи, currentTime — смещение от начала
+  const useStreamFallbackRef = useRef(false); // /stream: не передаём position, API использует stream_position
 
   const playStream = async () => {
     if (!audioRef.current) return;
@@ -61,6 +63,8 @@ export default function Player() {
     }
 
     if (hlsUrl) {
+      useStreamFallbackRef.current = false;
+      hlsStartPositionRef.current = startSec;
       metadataRef.current = null;
       getPlaylistMetadata(today)
         .then((data) => {
@@ -88,6 +92,7 @@ export default function Player() {
             hls.destroy();
             hlsRef.current = null;
             if (startSec > 0) {
+              hlsStartPositionRef.current = 0; // retry с начала потока
               const retry = new Hls({ ...hlsConfig, startPosition: 0 });
               hlsRef.current = retry;
               retry.loadSource(hlsUrl);
@@ -133,6 +138,8 @@ export default function Player() {
 
   const playStreamFallback = (serverStartSec) => {
     if (!audioRef.current) return;
+    useStreamFallbackRef.current = true;
+    hlsStartPositionRef.current = null;
     metadataRef.current = null;
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -166,6 +173,8 @@ export default function Player() {
     unlockAudioContext();
     if (playing) {
       positionGetterRef.current = null;
+      useStreamFallbackRef.current = false;
+      hlsStartPositionRef.current = null;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -193,19 +202,25 @@ export default function Player() {
 
   useEffect(() => {
     const poll = () => {
-      const pos = positionGetterRef.current?.();
+      let pos = positionGetterRef.current?.();
       const meta = metadataRef.current;
+      // HLS: currentTime — смещение от начала потока, tracks — секунды от полуночи
+      if (pos != null && hlsStartPositionRef.current != null) {
+        pos = hlsStartPositionRef.current + pos;
+      }
+      // /stream: не передаём position — API использует stream_position (пишет backend при стриминге)
+      const apiPos = useStreamFallbackRef.current ? null : pos;
       if (meta?.tracks?.length && pos != null && pos >= 0) {
         const t = meta.tracks.find((tr) => pos >= tr.start && pos < tr.end);
         setNowPlayingTitle(t?.title ?? null);
         return;
       }
-      getBroadcastNowPlaying(moscowDateStr(), pos)
+      getBroadcastNowPlaying(moscowDateStr(), apiPos)
         .then((r) => setNowPlayingTitle(r?.title || null))
         .catch(() => setNowPlayingTitle(null));
     };
     poll();
-    const id = setInterval(poll, 2000);
+    const id = setInterval(poll, 1000);
     return () => clearInterval(id);
   }, []);
 
