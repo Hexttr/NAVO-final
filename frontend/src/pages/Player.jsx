@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
 import Hls from "hls.js";
-import { getBroadcastNowPlaying, getHlsUrl, moscowDateStr } from "../api";
+import { getBroadcastNowPlaying, getHlsUrl, getPlaylistMetadata, moscowDateStr } from "../api";
 import "./Player.css";
 
 const STREAM_URL = "/stream";
@@ -63,10 +63,18 @@ export default function Player() {
     if (hlsUrl) {
       metadataRef.current = null;
       const metadataUrl = hlsUrl.replace(/stream\.m3u8$/, "metadata.json");
-      fetch(metadataUrl.startsWith("http") ? metadataUrl : window.location.origin + metadataUrl)
+      const fullMetadataUrl = metadataUrl.startsWith("http") ? metadataUrl : window.location.origin + metadataUrl;
+      fetch(fullMetadataUrl)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (data?.tracks?.length) metadataRef.current = data;
+          if (data?.tracks?.length) {
+            metadataRef.current = data;
+            return;
+          }
+          return getPlaylistMetadata(today);
+        })
+        .then((apiData) => {
+          if (apiData?.tracks?.length && !metadataRef.current) metadataRef.current = apiData;
         })
         .catch(() => {});
       if (Hls.isSupported()) {

@@ -328,6 +328,13 @@ export async function getBroadcastPlaylistUrls(date, sync = true) {
   return r.json();
 }
 
+/** Метаданные для «Сейчас играет» — fallback когда metadata.json 404 */
+export async function getPlaylistMetadata(date) {
+  const r = await fetch(`${API}/broadcast/playlist-metadata?d=${date}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
 /** Возвращает { url, startPosition }. startPosition — секунды от полуночи МСК (с сервера). */
 export async function getHlsUrl(date) {
   const r = await fetch(`${API}/broadcast/hls-url?d=${date}`);

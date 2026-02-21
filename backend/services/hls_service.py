@@ -172,6 +172,40 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
     return {"ok": True, "url": url, "schedule_hash": schedule_hash}
 
 
+def get_playlist_metadata(db: Session, broadcast_date: date) -> dict:
+    """
+    Возвращает {tracks: [{start, end, title}]} для «Сейчас играет».
+    Источник истины — БД. Fallback когда metadata.json 404 (старый HLS или nginx).
+    """
+    from services.broadcast_service import get_entity_meta
+
+    items = (
+        db.query(BroadcastItem)
+        .filter(
+            BroadcastItem.broadcast_date == broadcast_date,
+            BroadcastItem.entity_type != "empty",
+        )
+        .order_by(BroadcastItem.sort_order)
+        .all()
+    )
+    tracks = []
+    for it in items:
+        start_sec = parse_time(it.start_time or "00:00:00")
+        dur = float(it.duration_seconds or 0)
+        end_sec = start_sec + dur
+        title = None
+        if it.metadata_json:
+            try:
+                meta = json.loads(it.metadata_json)
+                title = meta.get("title", "")
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not title:
+            title = get_entity_meta(db, it.entity_type, it.entity_id)
+        tracks.append({"start": start_sec, "end": end_sec, "title": title or "—"})
+    return {"tracks": tracks}
+
+
 def get_hls_url(db: Session, broadcast_date: date) -> str | None:
     """
     Возвращает URL HLS если готов, иначе None.

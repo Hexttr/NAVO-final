@@ -516,6 +516,18 @@ def get_stream_url():
     return {"url": "http://localhost:8000/stream"}  # TODO: configure Icecast URL
 
 
+@router.get("/playlist-metadata")
+def playlist_metadata(
+    d: date = Query(..., description="Date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Метаданные для «Сейчас играет»: {tracks: [{start, end, title}]}. Fallback когда metadata.json 404."""
+    from services.hls_service import get_playlist_metadata
+
+    ensure_broadcast_for_date(db, d)
+    return get_playlist_metadata(db, d)
+
+
 @router.get("/hls-url")
 def hls_url(
     d: date = Query(..., description="Date YYYY-MM-DD"),
