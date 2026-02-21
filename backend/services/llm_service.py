@@ -69,7 +69,7 @@ async def _call_openai(system_prompt: str, user_content: str) -> str:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": "gpt-5.2",
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content},
