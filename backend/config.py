@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     base_url: str = "https://navoradio.com"
     # STREAM_BITRATE: 128k, 256k, 320k, 512k — выше = лучше качество, ~4× трафик
     stream_bitrate: str = "256k"
+    # Смещение эфира в секундах: +120 = на 2 мин вперёд (если запаздывает), -60 = на 1 мин назад
+    sync_offset_seconds: int = 0
+    # Московское время из worldtimeapi.org (True) или системное (False)
+    use_external_time: bool = True
 
     class Config:
         env_file = str(_env_path)

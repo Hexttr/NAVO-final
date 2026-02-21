@@ -67,8 +67,26 @@ def _moscow_now() -> datetime:
 
 
 def moscow_date() -> date:
-    """Текущая дата по Москве (UTC+3). Для выбора эфира и синхронизации."""
+    """Текущая дата по Москве. Из API при use_external_time, иначе системное время."""
+    if getattr(settings, "use_external_time", True):
+        from services.time_service import moscow_date_from_api
+        d = moscow_date_from_api()
+        if d is not None:
+            return d
     return _moscow_now().date()
+
+
+def moscow_seconds_now() -> int:
+    """Секунды от полуночи МСК. Из API при use_external_time, иначе системное."""
+    base = None
+    if getattr(settings, "use_external_time", True):
+        from services.time_service import moscow_seconds_from_api
+        base = moscow_seconds_from_api()
+    if base is None:
+        now = _moscow_now()
+        base = now.hour * 3600 + now.minute * 60 + now.second
+    offset = getattr(settings, "sync_offset_seconds", 0) or 0
+    return max(0, min(86400 - 1, base + offset))
 
 
 def _parse_time(t: str) -> int:
@@ -253,6 +271,9 @@ def ensure_broadcast_for_date(db: Session, target_date: date) -> bool:
             metadata_json=item.metadata_json or "{}",
         ))
     db.commit()
+    # Пересчёт длительностей из файлов — тайминги сразу по расписанию
+    from services.broadcast_service import recalc_broadcast_for_date
+    recalc_broadcast_for_date(db, target_date)
     return True
 
 
@@ -324,8 +345,7 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
     start_idx = 0
     seek_sec = 0
     if sync_to_moscow:
-        now = _moscow_now()
-        now_sec = now.hour * 3600 + now.minute * 60 + now.second
+        now_sec = moscow_seconds_now()
         start_idx, seek_sec = _find_current_position(playlist, now_sec)
     idx = start_idx
     first_round = True
@@ -491,10 +511,7 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
     """
     if not playlist:
         return
-    now_sec = 0
-    if sync_to_moscow:
-        now = _moscow_now()
-        now_sec = now.hour * 3600 + now.minute * 60 + now.second
+    now_sec = moscow_seconds_now() if sync_to_moscow else 0
     start_idx, seek_sec = _find_current_position(playlist, now_sec)
     # Seek = сумма длительностей ВСЕХ элементов до start_idx (path=None = из playlist)
     total_seek = 0.0
@@ -580,8 +597,7 @@ async def stream_broadcast_ffmpeg(playlist: list[tuple], sync_to_moscow: bool = 
     start_idx = 0
     seek_sec = 0
     if sync_to_moscow:
-        now = _moscow_now()
-        now_sec = now.hour * 3600 + now.minute * 60 + now.second
+        now_sec = moscow_seconds_now()
         start_idx, seek_sec = _find_current_position(playlist, now_sec)
     idx = start_idx
     first_round = True

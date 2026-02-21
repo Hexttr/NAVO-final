@@ -38,8 +38,6 @@ def get_playlist_urls(
     db: Session = Depends(get_db),
 ):
     """Плейлист для последовательного воспроизведения на фронте. Возвращает {items, startIndex}. Если на дату нет эфира — копируется с последнего дня."""
-    from datetime import datetime, timezone, timedelta
-
     ensure_broadcast_for_date(db, d)
     broadcast_date = d
     # Относительные URL — браузер использует тот же протокол, что и страница (HTTPS)
@@ -73,8 +71,8 @@ def get_playlist_urls(
             result.append(rec)
     start_index = 0
     if sync and result:
-        now = datetime.now(timezone(timedelta(hours=3)))
-        now_sec = now.hour * 3600 + now.minute * 60 + now.second
+        from services.streamer_service import moscow_seconds_now
+        now_sec = moscow_seconds_now()
         for i, it in enumerate(items):
             parts = (it.start_time or "00:00:00").split(":")
             start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
@@ -93,13 +91,12 @@ def debug_time(
     d: date | None = Query(None, description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """Отладка: время сервера и текущий элемент. Сервер должен быть в Europe/Moscow."""
-    from datetime import datetime, timezone, timedelta
+    """Отладка: время сервера и текущий элемент."""
+    from services.streamer_service import moscow_date, moscow_seconds_now
 
-    MOSCOW_TZ = timezone(timedelta(hours=3))
-    now = datetime.now(MOSCOW_TZ)
-    now_sec = now.hour * 3600 + now.minute * 60 + now.second
-    broadcast_date = d or now.date()
+    now_sec = moscow_seconds_now()
+    h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
+    broadcast_date = d or moscow_date()
     items = (
         db.query(BroadcastItem)
         .filter(
@@ -118,7 +115,7 @@ def debug_time(
             current = {"entity_type": it.entity_type, "entity_id": it.entity_id, "start_time": it.start_time}
             break
     return {
-        "server_time": now.strftime("%H:%M:%S"),
+        "server_time": f"{h:02d}:{m:02d}:{s:02d}",
         "server_date": str(broadcast_date),
         "now_sec": now_sec,
         "current_item": current,
@@ -132,16 +129,15 @@ def get_now_playing(
     db: Session = Depends(get_db),
 ):
     """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет». Если на дату нет эфира — копируется с последнего дня."""
-    from datetime import datetime, timezone, timedelta
     from fastapi.responses import JSONResponse
+    from services.streamer_service import moscow_seconds_now
     import json
 
     ensure_broadcast_for_date(db, d)
     broadcast_date = d
-    MOSCOW_TZ = timezone(timedelta(hours=3))
-    now = datetime.now(MOSCOW_TZ)
-    now_sec = now.hour * 3600 + now.minute * 60 + now.second
-    current_time = now.strftime("%H:%M:%S")
+    now_sec = moscow_seconds_now()
+    h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
+    current_time = f"{h:02d}:{m:02d}:{s:02d}"
 
     items = (
         db.query(BroadcastItem)
@@ -429,13 +425,11 @@ def hls_url(
     db: Session = Depends(get_db),
 ):
     """URL HLS если готов, иначе null. startPosition — секунды от полуночи МСК для seek (всегда по серверу)."""
-    from datetime import datetime, timezone, timedelta
+    from services.streamer_service import moscow_seconds_now
 
     ensure_broadcast_for_date(db, d)
     url = get_hls_url(db, d)
-    now = datetime.now(timezone(timedelta(hours=3)))
-    start_position = now.hour * 3600 + now.minute * 60 + now.second
-    return {"url": url, "hasHls": url is not None, "startPosition": start_position}
+    return {"url": url, "hasHls": url is not None, "startPosition": moscow_seconds_now()}
 
 
 @router.get("/hls-status")
@@ -577,8 +571,8 @@ def debug_concat(
     except Exception as e:
         concat_content = str(e)
 
-    now = datetime.now(timezone(timedelta(hours=3)))
-    now_sec = now.hour * 3600 + now.minute * 60 + now.second
+    from services.streamer_service import moscow_seconds_now
+    now_sec = moscow_seconds_now()
     start_idx, seek_sec = _find_current_position(playlist, now_sec)
     total_seek = 0.0
     for i in range(start_idx):

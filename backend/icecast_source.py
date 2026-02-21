@@ -19,6 +19,7 @@ from services.streamer_service import (
     stream_broadcast_async,
     stream_broadcast_ffmpeg_concat,
     moscow_date,
+    moscow_seconds_now,
     ensure_broadcast_for_date,
     _find_current_position,
     get_broadcast_schedule_hash,
@@ -46,7 +47,6 @@ def main():
     signal.signal(signal.SIGINT, sig_handler)
 
     async def run_source():
-        from datetime import datetime, timezone, timedelta
         schedule_changed = False
         while not shutdown:
             db = SessionLocal()
@@ -67,10 +67,10 @@ def main():
                 await asyncio.sleep(60)
                 continue
 
-            now = datetime.now(timezone(timedelta(hours=3)))
-            now_sec = now.hour * 3600 + now.minute * 60 + now.second
+            now_sec = moscow_seconds_now()
             start_idx, seek_sec = _find_current_position(playlist, now_sec)
-            print(f"Стриминг эфира в Icecast ({len(playlist)} треков, mode={STREAM_MODE}), старт: idx={start_idx} seek={seek_sec}s ({now.hour:02d}:{now.minute:02d}:{now.second:02d} МСК)")
+            h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
+            print(f"Стриминг эфира в Icecast ({len(playlist)} треков, mode={STREAM_MODE}), старт: idx={start_idx} seek={seek_sec}s ({h:02d}:{m:02d}:{s:02d} МСК)")
             icecast_url = f"icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}/{ICECAST_MOUNT}"
             ffmpeg_cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
