@@ -133,7 +133,7 @@ export default function Broadcast() {
     const poll = async () => {
       try {
         const st = await getHlsStatus(selectedDate);
-        if (st?.hasHls) {
+        if (st?.hasHls && !st?.generation_in_progress) {
           clearHlsGenerating(selectedDate);
           setGeneratingHls(false);
         }

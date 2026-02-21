@@ -523,19 +523,24 @@ def hls_url(
     return {"url": url, "hasHls": url is not None, "startPosition": moscow_seconds_now()}
 
 
+def _hls_generating_lock_path(d: date) -> Path:
+    project_root = Path(__file__).resolve().parent.parent.parent
+    return project_root / "uploads" / f"hls_generating_{d}.lock"
+
+
 @router.get("/hls-status")
 def hls_status(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    """Статус HLS. hasHls=true если есть любой доступный HLS (как get_hls_url, с fallback)."""
+    """Статус HLS. hasHls=true если есть любой доступный HLS. generation_in_progress=true если run_hls ещё работает."""
     from services.streamer_service import get_broadcast_schedule_hash
     from services.hls_service import get_hls_path, get_hls_url
 
     ensure_broadcast_for_date(db, d)
     playlist = get_playlist_with_times(db, d)
     if not playlist:
-        return {"ok": False, "error": "Нет эфира на дату", "hasHls": False}
+        return {"ok": False, "error": "Нет эфира на дату", "hasHls": False, "generation_in_progress": False}
 
     url = get_hls_url(db, d)
     schedule_hash = get_broadcast_schedule_hash(db, d)
@@ -546,9 +551,12 @@ def hls_status(
     if date_dir.exists():
         existing_hashes = [p.name for p in date_dir.iterdir() if p.is_dir() and (p / "stream.m3u8").exists()]
 
+    generation_in_progress = _hls_generating_lock_path(d).exists()
+
     return {
         "ok": True,
         "hasHls": url is not None,
+        "generation_in_progress": generation_in_progress,
         "url": url,
         "schedule_hash": schedule_hash,
         "m3u8_path": str(m3u8_path),
@@ -596,6 +604,11 @@ def trigger_generate_hls(
             raise HTTPException(500, "run_hls.py не найден")
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = _hls_generating_lock_path(d)
+        try:
+            lock_path.write_text(f"pid={os.getpid()}", encoding="utf-8")
+        except OSError:
+            pass
         log_file = open(log_path, "a", encoding="utf-8")
         log_file.write(f"\n=== HLS {d} started [code: concat-fix] (PID will follow) ===\n")
         log_file.flush()

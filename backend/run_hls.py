@@ -15,6 +15,12 @@ from database import SessionLocal
 from services.hls_service import generate_hls
 
 
+def _lock_path(d: date) -> Path:
+    backend_dir = Path(__file__).resolve().parent
+    project_root = backend_dir.parent
+    return project_root / "uploads" / f"hls_generating_{d}.lock"
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python run_hls.py YYYY-MM-DD", file=sys.stderr)
@@ -43,6 +49,10 @@ def main():
         sys.exit(1)
     finally:
         db.close()
+        try:
+            _lock_path(d).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
