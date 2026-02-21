@@ -184,7 +184,7 @@ def get_now_playing(
     db: Session = Depends(get_db),
 ):
     """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет».
-    Приоритет: 1) stream_position.json (Icecast source — фактическая позиция), 2) position от клиента (HLS), 3) время сервера."""
+    Приоритет: 1) position от клиента (HLS/плеер — фактическая позиция), 2) stream_position.json (Icecast), 3) время сервера."""
     from fastapi.responses import JSONResponse
     from services.streamer_service import moscow_seconds_now
     import json
@@ -205,10 +205,10 @@ def get_now_playing(
         except Exception as e:
             logger.warning("read_stream_position failed: %s", e)
 
-        if stream_pos is not None:
-            now_sec = float(stream_pos)
-        elif position is not None and position >= 0:
+        if position is not None and position >= 0:
             now_sec = float(position)
+        elif stream_pos is not None:
+            now_sec = float(stream_pos)
         else:
             now_sec = moscow_seconds_now()
 
