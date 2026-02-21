@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2, ChevronDown, ChevronUp, Loader2, Calculator } from "lucide-react";
 import {
   moscowDateStr,
   getBroadcast,
@@ -9,6 +9,7 @@ import {
   deleteBroadcast,
   generateHls,
   getHlsStatus,
+  recalcBroadcastDurations,
   deleteBroadcastItem,
   insertBroadcastItem,
   moveBroadcastItem,
@@ -88,6 +89,7 @@ export default function Broadcast() {
   const [revoicingId, setRevoicingId] = useState(null);
   const [regeneratingId, setRegeneratingId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [recalcLoading, setRecalcLoading] = useState(false);
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
@@ -522,6 +524,27 @@ export default function Broadcast() {
           >
             {generatingHls ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
             {generatingHls ? "Обновляю HLS" : "Обновить HLS"}
+          </button>
+          <button
+            className={`broadcast-btn broadcast-btn-secondary ${recalcLoading ? "broadcast-btn-recalc-active" : ""}`}
+            onClick={async () => {
+              setRecalcLoading(true);
+              try {
+                const r = await recalcBroadcastDurations();
+                const msg = r?.message || `Обновлено: ${r?.total ?? 0} записей`;
+                await load();
+                alert(msg);
+              } catch (e) {
+                alert(e.message || "Ошибка");
+              } finally {
+                setRecalcLoading(false);
+              }
+            }}
+            disabled={loading || recalcLoading || items.length === 0}
+            title="Пересчитать длительности из файлов (ffprobe) — обновит start_time, end_time для точного расписания"
+          >
+            {recalcLoading ? <Loader2 size={16} className="spin" /> : <Calculator size={16} />}
+            {recalcLoading ? "Пересчитываю…" : "Пересчитать длительности"}
           </button>
         </div>
         <div className="broadcast-actions-count">

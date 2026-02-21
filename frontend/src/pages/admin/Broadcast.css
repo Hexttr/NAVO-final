@@ -97,6 +97,18 @@
   opacity: 1;
 }
 
+.broadcast-btn-recalc-active {
+  background: var(--accent-cyan-subtle);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(79, 209, 197, 0.2);
+  animation: broadcast-hls-pulse 2s ease-in-out infinite;
+}
+
+.broadcast-btn-recalc-active:disabled {
+  opacity: 1;
+}
+
 @keyframes broadcast-hls-pulse {
   0%, 100% { box-shadow: 0 0 0 2px rgba(79, 209, 197, 0.2); }
   50% { box-shadow: 0 0 12px 2px rgba(79, 209, 197, 0.35); }
