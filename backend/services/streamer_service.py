@@ -503,11 +503,11 @@ def _path_for_concat(p: Path) -> str:
     return str(p.resolve()).replace("\\", "/").replace("'", "'\\''")
 
 
-def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None, start_from_idx: int = 0) -> Path | None:
+def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None, start_from_idx: int = 0, loop_for_midnight: bool = True) -> Path | None:
     """
     Создаёт concat-файл для FFmpeg. path=None → реальный файл тишины.
     start_from_idx: начать с этого индекса (для быстрого seek — только seek_sec в первом файле).
-    Повторяем плейлист 2 раза для бесшовного перехода в полночь.
+    loop_for_midnight: дублировать плейлист для бесшовного перехода в полночь (стрим). Для HLS VOD — False.
     """
     lines = ["ffconcat version 1.0", ""]
     has_any = False
@@ -525,15 +525,16 @@ def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None, star
                 has_any = True
     if not has_any or len(lines) <= 2:
         return None
-    # Дублируем для зацикливания
-    for idx in indices:
-        path, _, dur, _ = playlist[idx]
-        if path is not None and path.exists():
-            lines.append(f"file '{_path_for_concat(path)}'")
-        elif dur > 0:
-            silence_path = _get_or_create_silence_mp3(int(dur))
-            if silence_path and silence_path.exists():
-                lines.append(f"file '{_path_for_concat(silence_path)}'")
+    # Дублируем для зацикливания (только для live-стрима — не для HLS VOD)
+    if loop_for_midnight:
+        for idx in indices:
+            path, _, dur, _ = playlist[idx]
+            if path is not None and path.exists():
+                lines.append(f"file '{_path_for_concat(path)}'")
+            elif dur > 0:
+                silence_path = _get_or_create_silence_mp3(int(dur))
+                if silence_path and silence_path.exists():
+                    lines.append(f"file '{_path_for_concat(silence_path)}'")
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
         concat_path = out_dir / "concat.list"

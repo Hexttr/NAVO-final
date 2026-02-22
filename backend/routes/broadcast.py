@@ -637,12 +637,15 @@ def trigger_generate_hls(
         python_exe = Path(sys.executable)
         run_script = backend_dir / "run_hls.py"
         log_path = project_root / "uploads" / "hls_generation.log"
+        lock_path = _hls_generating_lock_path(d)
+
+        if lock_path.exists():
+            raise HTTPException(409, "Генерация HLS уже запущена. Подождите завершения (~10–30 мин).")
 
         if not run_script.exists():
             raise HTTPException(500, "run_hls.py не найден")
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path = _hls_generating_lock_path(d)
         try:
             lock_path.write_text(f"pid={os.getpid()}", encoding="utf-8")
         except OSError:

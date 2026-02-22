@@ -101,14 +101,15 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
     segment_pattern = str(out_dir / "seg_%04d.ts")
 
     _log(f"Creating concat for {len(playlist)} items (may take a few min)...")
-    concat_path = _create_concat_file(playlist, out_dir=out_dir)
+    concat_path = _create_concat_file(playlist, out_dir=out_dir, loop_for_midnight=False)
     if not concat_path or not concat_path.exists():
         return {"ok": False, "error": "Не удалось создать concat (нет файлов)"}
 
     bitrate = getattr(settings, "stream_bitrate", "256k") or "256k"
     # libmp3lame может вызывать проблемы с hls.js (воспроизведение без звука), используем aac
+    # -threads 0: все ядра CPU; loop_for_midnight=False в concat — только 24ч вместо 48ч
     args = [
-        "ffmpeg", "-y", "-loglevel", "warning",
+        "ffmpeg", "-y", "-threads", "0", "-loglevel", "warning",
         "-f", "concat", "-safe", "0", "-i", str(concat_path),
         "-c:a", "aac", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
         "-f", "hls", "-hls_time", str(HLS_SEGMENT_DURATION),
@@ -117,9 +118,9 @@ def generate_hls(db: Session, broadcast_date: date) -> dict:
         str(m3u8_path),
     ]
 
-    # 877 слотов × ~100 сек ≈ 24 ч. FFmpeg ~20–40× быстрее → 40–70 мин. Таймаут 2 ч.
+    # 24 ч контента (без дублирования). FFmpeg ~20–40× быстрее → 30–50 мин. Таймаут 2 ч на всякий случай.
     HLS_TIMEOUT = 7200
-    _log(f"Running ffmpeg (40–70 мин для суток, timeout={HLS_TIMEOUT//60} мин)...")
+    _log(f"Running ffmpeg (~30–50 мин для суток, timeout={HLS_TIMEOUT//60} мин)...")
     try:
         r = subprocess.run(args, capture_output=True, timeout=HLS_TIMEOUT, check=False)
         if r.returncode != 0:
