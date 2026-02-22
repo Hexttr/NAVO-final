@@ -105,7 +105,7 @@ def diagnostics_now_playing(
 
     slot_db_detail = slot_real_detail = None  # инициализация до try (для except)
     try:
-        time_source = "worldtimeapi" if moscow_seconds_from_api() is not None else "system"
+        time_source = "system" if not getattr(settings, "use_external_time", False) else ("worldtimeapi" if moscow_seconds_from_api() is not None else "system")
         broadcast_date = d or moscow_date()
         ensure_broadcast_for_date(db, broadcast_date)
         now_sec = moscow_seconds_now()
@@ -483,6 +483,24 @@ def _get_entity_text(db: Session, entity_type: str, entity_id: int) -> str | Non
     return None
 
 
+def _load_entity_texts_batch(db: Session, items: list) -> dict:
+    """Загрузить тексты для dj/news/weather одним запросом на тип. {(type, id): text}."""
+    out = {}
+    dj_ids = list({it.entity_id for it in items if it.entity_type == "dj"})
+    news_ids = list({it.entity_id for it in items if it.entity_type == "news"})
+    weather_ids = list({it.entity_id for it in items if it.entity_type == "weather"})
+    if dj_ids:
+        for s in db.query(Song).filter(Song.id.in_(dj_ids)).all():
+            out[("dj", s.id)] = s.dj_text or ""
+    if news_ids:
+        for n in db.query(News).filter(News.id.in_(news_ids)).all():
+            out[("news", n.id)] = n.text or ""
+    if weather_ids:
+        for w in db.query(Weather).filter(Weather.id.in_(weather_ids)).all():
+            out[("weather", w.id)] = w.text or ""
+    return out
+
+
 @router.get("")
 def get_broadcast(
     d: date = Query(..., description="Date YYYY-MM-DD"),
@@ -494,6 +512,7 @@ def get_broadcast(
         .order_by(BroadcastItem.sort_order)
         .all()
     )
+    texts = _load_entity_texts_batch(db, items)
     result = []
     for it in items:
         rec = {
@@ -507,7 +526,7 @@ def get_broadcast(
             "metadata_json": it.metadata_json,
         }
         if it.entity_type in ("dj", "news", "weather"):
-            rec["text"] = _get_entity_text(db, it.entity_type, it.entity_id) or ""
+            rec["text"] = texts.get((it.entity_type, it.entity_id), "") or ""
         else:
             rec["text"] = None
         result.append(rec)

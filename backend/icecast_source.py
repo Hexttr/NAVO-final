@@ -170,6 +170,14 @@ def main():
 
             checker_task = asyncio.create_task(check_schedule())
 
+            async def shutdown_watchdog():
+                """При SIGTERM — отменить stream_task для быстрого выхода."""
+                while not shutdown and not stream_task.done():
+                    await asyncio.sleep(1)
+                if shutdown and not stream_task.done():
+                    stream_task.cancel()
+
+            watchdog_task = asyncio.create_task(shutdown_watchdog())
             try:
                 await stream_task
             except asyncio.CancelledError:
@@ -180,6 +188,11 @@ def main():
             except Exception as e:
                 _log(f"Ошибка стриминга: {e}")
             finally:
+                watchdog_task.cancel()
+                try:
+                    await watchdog_task
+                except asyncio.CancelledError:
+                    pass
                 if position_task:
                     position_task.cancel()
                     try:

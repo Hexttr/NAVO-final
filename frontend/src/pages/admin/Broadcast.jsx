@@ -160,7 +160,7 @@ export default function Broadcast() {
       getBroadcastNowPlaying(selectedDate, null).then(setNowPlaying).catch(() => {});
     };
     poll();
-    const id = setInterval(poll, 500);
+    const id = setInterval(poll, 2000);
     return () => clearInterval(id);
   }, [selectedDate, minuteTick]);
 

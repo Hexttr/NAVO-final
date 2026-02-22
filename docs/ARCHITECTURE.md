@@ -49,7 +49,7 @@ MAX_AGE_SEC=20 — данные старше 20 сек считаются уст
 
 ### 3. Московское время
 
-- **time_service**: worldtimeapi.org (кэш 60 сек), fallback — системное время
+- **Время**: системное (сервер в Europe/Moscow). use_external_time=True — worldtimeapi.org (опционально)
 - **Сервер**: рекомендуется Europe/Moscow (TZ)
 - **sync_offset_seconds**: смещение в настройках (для коррекции рассинхрона)
 
