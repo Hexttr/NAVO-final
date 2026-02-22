@@ -14,7 +14,7 @@ MAX_AGE_SEC = 20  # данные считаются устаревшими че�
 MAX_AGE_WHEN_TRACK_KNOWN = 45  # когда известен трек — дольше доверяем (стрим пишет каждые 2 сек)
 
 
-def _get_path() -> Path | None:
+def get_stream_position_path() -> Path | None:
     try:
         base = PROJECT_ROOT / settings.upload_dir
         base.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,7 @@ def write_stream_position(
 ) -> None:
     """Записать позицию и текущий трек. Источник стрима знает, что играет — без вычислений."""
     try:
-        path = _get_path()
+        path = get_stream_position_path()
         if path is None:
             return
         data = {
@@ -55,7 +55,7 @@ def read_now_playing() -> dict | None:
     Когда известен трек (entity_type) — допускаем больший возраст (стрим пишет каждые 2 сек).
     """
     try:
-        path = _get_path()
+        path = get_stream_position_path()
         if path is None or not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -82,7 +82,7 @@ def read_stream_position() -> float | None:
     иначе None.
     """
     try:
-        path = _get_path()
+        path = get_stream_position_path()
         if path is None or not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))

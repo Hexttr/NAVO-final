@@ -22,7 +22,11 @@ export async function getDiagnosticsNowPlaying(date = null) {
   const base = API.replace("/api", "") || "";
   const d = date || moscowDateStr();
   const r = await fetch(`${base}/api/broadcast/diagnostics/now-playing?d=${d}`, { cache: "no-store" });
-  return r.json();
+  const data = await r.json();
+  if (!r.ok) {
+    throw new Error(data.detail || data.error || `HTTP ${r.status}`);
+  }
+  return data;
 }
 
 export async function getSongs() {

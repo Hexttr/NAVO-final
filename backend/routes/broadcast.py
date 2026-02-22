@@ -97,131 +97,178 @@ def diagnostics_now_playing(
     Показывает: время МСК, stream_position.json, ответ now-playing, слот по расписанию (БД и реальные длительности).
     """
     from services.streamer_service import moscow_date, moscow_seconds_now, get_playlist_with_times, _find_track_at_position
-    from services.stream_position import read_now_playing, read_stream_position, _get_path
+    from services.stream_position import read_now_playing, read_stream_position, get_stream_position_path
     from services.broadcast_service import get_entity_meta
+    from services.time_service import moscow_seconds_from_api
     import time
     import json
 
-    broadcast_date = d or moscow_date()
-    ensure_broadcast_for_date(db, broadcast_date)
-    now_sec = moscow_seconds_now()
-    h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
-    moscow_time_str = f"{h:02d}:{m:02d}:{s:02d}"
-
-    # 1. stream_position.json
-    sp_path = _get_path()
-    sp_raw = None
-    sp_age_sec = None
-    if sp_path and sp_path.exists():
-        try:
-            data = json.loads(sp_path.read_text(encoding="utf-8"))
-            sp_raw = data
-            sp_age_sec = round(time.time() - data.get("timestamp", 0), 1)
-        except Exception as e:
-            sp_raw = {"error": str(e)}
-
-    # 2. read_now_playing()
-    np_from_file = read_now_playing()
-
-    # 3. read_stream_position()
-    stream_pos = read_stream_position()
-
-    # 4. Что вернёт now-playing (полная логика)
-    position_used = stream_pos if stream_pos is not None else now_sec
-    playlist = get_playlist_with_times(db, broadcast_date)
-    slot_by_db = _find_track_at_position(playlist, position_used) if playlist else None
-
-    # 5. Слот по расписанию (БД) — детали
-    slot_db_detail = None
-    if playlist:
-        for item in playlist:
-            start_sec, dur = item[1], item[2]
-            if start_sec <= position_used < start_sec + dur:
-                slot_db_detail = {
-                    "entity_type": item[3],
-                    "entity_id": item[4],
-                    "title": item[5] if len(item) > 5 else "—",
-                    "start_sec": start_sec,
-                    "end_sec": start_sec + dur,
-                    "duration_db": dur,
-                }
-                break
-
-    # 6. Слот по реальным длительностям (опционально — медленно)
-    playlist_real = get_playlist_with_times(db, broadcast_date, use_real_durations=True) if real_durations else None
-    if playlist_real:
-        cum = 0
-        for item in playlist_real:
-            start_sec, dur = item[1], item[2]
-            end_sec = start_sec + dur
-            if start_sec <= position_used < end_sec:
-                slot_real_detail = {
-                    "entity_type": item[3],
-                    "entity_id": item[4],
-                    "title": item[5] if len(item) > 5 else "—",
-                    "start_sec": start_sec,
-                    "end_sec": end_sec,
-                    "duration_real": dur,
-                }
-                break
-            cum = end_sec
-
-    # 7. Итоговый ответ now-playing (что видит пользователь)
-    now_playing_response = None
-    if np_from_file and "entity_type" in np_from_file:
-        now_playing_response = {
-            "source": "stream_position",
-            "entityType": np_from_file.get("entity_type"),
-            "entityId": np_from_file.get("entity_id"),
-            "title": np_from_file.get("title"),
-            "currentTime": np_from_file.get("currentTime"),
-        }
-    else:
-        # Fallback
-        slot = slot_real_detail or slot_db_detail
-        if slot:
-            title = slot.get("title")
-            if not title:
-                try:
-                    title = get_entity_meta(db, slot["entity_type"], slot["entity_id"])
-                except Exception:
-                    title = "—"
-            now_playing_response = {
-                "source": "fallback",
-                "entityType": slot["entity_type"],
-                "entityId": slot["entity_id"],
-                "title": title,
-                "currentTime": moscow_time_str,
-            }
-
-    # 8. Icecast
-    icecast_status = "unknown"
+    slot_db_detail = slot_real_detail = None  # инициализация до try (для except)
     try:
-        from urllib.request import urlopen, Request
-        req = Request("http://127.0.0.1:8001/live", method="HEAD")
-        with urlopen(req, timeout=2) as r:
-            icecast_status = f"live_{r.status}"
-    except Exception as e:
-        icecast_status = f"error_{type(e).__name__}"
+        time_source = "worldtimeapi" if moscow_seconds_from_api() is not None else "system"
+        broadcast_date = d or moscow_date()
+        ensure_broadcast_for_date(db, broadcast_date)
+        now_sec = moscow_seconds_now()
+        h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
+        moscow_time_str = f"{h:02d}:{m:02d}:{s:02d}"
 
-    return {
-        "moscow_time": moscow_time_str,
-        "moscow_sec": now_sec,
-        "broadcast_date": str(broadcast_date),
-        "stream_position_file": {
-            "path": str(sp_path) if sp_path else None,
-            "exists": sp_path.exists() if sp_path else False,
-            "age_sec": sp_age_sec,
-            "raw": sp_raw,
-        },
-        "position_used": position_used,
-        "position_source": "stream_position" if stream_pos is not None else "moscow_seconds_now",
-        "now_playing_response": now_playing_response,
-        "slot_by_db": slot_db_detail,
-        "slot_by_real_durations": slot_real_detail,
-        "icecast": icecast_status,
-        "playlist_count": len(playlist) if playlist else 0,
-    }
+        # 1. stream_position.json
+        sp_path = get_stream_position_path()
+        sp_raw = None
+        sp_age_sec = None
+        if sp_path and sp_path.exists():
+            try:
+                data = json.loads(sp_path.read_text(encoding="utf-8"))
+                sp_raw = data
+                sp_age_sec = round(time.time() - data.get("timestamp", 0), 1)
+            except Exception as e:
+                sp_raw = {"error": str(e)}
+
+        # 2. read_now_playing()
+        np_from_file = read_now_playing()
+
+        # 3. read_stream_position()
+        stream_pos = read_stream_position()
+
+        # 4. Что вернёт now-playing (полная логика)
+        position_used = stream_pos if stream_pos is not None else now_sec
+        playlist = get_playlist_with_times(db, broadcast_date)
+        slot_by_db = _find_track_at_position(playlist, position_used) if playlist else None
+
+        # 5. Слот по расписанию (БД) — детали
+        if playlist:
+            for item in playlist:
+                start_sec, dur = item[1], item[2]
+                if start_sec <= position_used < start_sec + dur:
+                    slot_db_detail = {
+                        "entity_type": item[3],
+                        "entity_id": item[4],
+                        "title": item[5] if len(item) > 5 else "—",
+                        "start_sec": start_sec,
+                        "end_sec": start_sec + dur,
+                        "duration_db": dur,
+                    }
+                    break
+
+        # 6. Слот по реальным длительностям (опционально — медленно)
+        playlist_real = get_playlist_with_times(db, broadcast_date, use_real_durations=True) if real_durations else None
+        if playlist_real:
+            cum = 0
+            for item in playlist_real:
+                start_sec, dur = item[1], item[2]
+                end_sec = start_sec + dur
+                if start_sec <= position_used < end_sec:
+                    slot_real_detail = {
+                        "entity_type": item[3],
+                        "entity_id": item[4],
+                        "title": item[5] if len(item) > 5 else "—",
+                        "start_sec": start_sec,
+                        "end_sec": end_sec,
+                        "duration_real": dur,
+                    }
+                    break
+                cum = end_sec
+
+        # 7. Итоговый ответ now-playing (что видит пользователь)
+        def _resolve_title(entity_type: str, entity_id: int, from_slot: str | None) -> str:
+            """Получить название из БД, если в слоте «—» или пусто."""
+            try:
+                t = get_entity_meta(db, entity_type, entity_id)
+                if t and str(t).strip():
+                    return str(t).strip()
+            except Exception:
+                pass
+            return from_slot or "—"
+
+        now_playing_response = None
+        if np_from_file and "entity_type" in np_from_file:
+            raw_title = np_from_file.get("title")
+            title = _resolve_title(
+                np_from_file["entity_type"], np_from_file["entity_id"],
+                raw_title if (raw_title and raw_title != "—") else None,
+            )
+            now_playing_response = {
+                "source": "stream_position",
+                "entityType": np_from_file.get("entity_type"),
+                "entityId": np_from_file.get("entity_id"),
+                "title": title,
+                "currentTime": np_from_file.get("currentTime"),
+            }
+        else:
+            # Fallback: слот по расписанию или ближайший
+            slot = slot_real_detail or slot_db_detail
+            if not slot and playlist:
+                # Позиция вне слотов — берём первый или последний
+                first = playlist[0]
+                last = playlist[-1]
+                if position_used < first[1]:
+                    slot = {"entity_type": first[3], "entity_id": first[4], "title": first[5] if len(first) > 5 else "—"}
+                elif position_used >= last[1] + last[2]:
+                    slot = {"entity_type": last[3], "entity_id": last[4], "title": last[5] if len(last) > 5 else "—"}
+            if slot:
+                raw_title = slot.get("title")
+                title = _resolve_title(slot["entity_type"], slot["entity_id"], raw_title if (raw_title and raw_title != "—") else None)
+                now_playing_response = {
+                    "source": "fallback",
+                    "entityType": slot["entity_type"],
+                    "entityId": slot["entity_id"],
+                    "title": title,
+                    "currentTime": moscow_time_str,
+                }
+
+        # 8. Icecast
+        icecast_status = "unknown"
+        try:
+            from urllib.request import urlopen, Request
+            req = Request("http://127.0.0.1:8001/live", method="HEAD")
+            with urlopen(req, timeout=2) as r:
+                icecast_status = f"live_{r.status}"
+        except Exception as e:
+            icecast_status = f"error_{type(e).__name__}"
+
+        first_slot_start = None
+        if playlist and len(playlist) > 0:
+            first_slot_start = playlist[0][1]
+            h, m, s = first_slot_start // 3600, (first_slot_start % 3600) // 60, first_slot_start % 60
+            first_slot_start = f"{h:02d}:{m:02d}:{s:02d}"
+
+        return {
+            "moscow_time": moscow_time_str,
+            "moscow_sec": now_sec,
+            "time_source": time_source,
+            "broadcast_date": str(broadcast_date),
+            "first_slot_start": first_slot_start,
+            "stream_position_file": {
+                "path": str(sp_path) if sp_path else None,
+                "exists": sp_path.exists() if sp_path else False,
+                "age_sec": sp_age_sec,
+                "raw": sp_raw,
+            },
+            "position_used": position_used,
+            "position_source": "stream_position" if stream_pos is not None else "moscow_seconds_now",
+            "now_playing_response": now_playing_response,
+            "slot_by_db": slot_db_detail,
+            "slot_by_real_durations": slot_real_detail,
+            "icecast": icecast_status,
+            "playlist_count": len(playlist) if playlist else 0,
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "moscow_time": "?",
+            "moscow_sec": 0,
+            "time_source": "?",
+            "broadcast_date": "?",
+            "first_slot_start": None,
+            "stream_position_file": {"exists": False, "raw": None},
+            "now_playing_response": None,
+            "slot_by_db": None,
+            "slot_by_real_durations": None,
+            "icecast": "?",
+            "playlist_count": 0,
+        }
 
 
 @router.get("/now-playing-debug")

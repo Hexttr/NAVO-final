@@ -28,20 +28,27 @@ function HlsClientTest({ url }) {
 function DiagnosticsNowPlaying() {
   const [np, setNp] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   useEffect(() => {
     let cancelled = false;
     const load = () => {
       setLoading(true);
+      setError(null);
       getDiagnosticsNowPlaying()
-        .then((d) => { if (!cancelled) setNp(d); })
-        .catch(() => { if (!cancelled) setNp(null); })
+        .then((d) => { if (!cancelled) { setNp(d); setError(null); } })
+        .catch((e) => { if (!cancelled) { setNp(null); setError(e.message || "Ошибка"); } })
         .finally(() => { if (!cancelled) setLoading(false); });
     };
     load();
     const id = setInterval(load, 5000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
-  if (!np) return <div className="diagnostics-card"><div className="diagnostics-card-title">Сейчас играет</div><div className="diag-hint">{loading ? "Загрузка…" : "—"}</div></div>;
+  if (!np) return (
+    <div className="diagnostics-card">
+      <div className="diagnostics-card-title">Сейчас играет</div>
+      <div className="diag-hint">{loading ? "Загрузка…" : (error || "Нет данных")}</div>
+    </div>
+  );
   const resp = np.now_playing_response || {};
   const sp = np.stream_position_file || {};
   const slotDb = np.slot_by_db || {};
@@ -49,12 +56,14 @@ function DiagnosticsNowPlaying() {
   return (
     <div className="diagnostics-card diagnostics-now-playing">
       <div className="diagnostics-card-title">Сейчас играет (диагностика)</div>
+      {np.error && <div className="diagnostics-error" style={{ marginBottom: 8 }}>Ошибка: {np.error}</div>}
       <ul className="diagnostics-list">
-        <li><strong>МСК:</strong> {np.moscow_time} ({np.moscow_sec} сек)</li>
+        <li><strong>МСК:</strong> {np.moscow_time} ({np.moscow_sec} сек) <span className="diag-hint">источник: {np.time_source || "?"}</span></li>
+        {np.first_slot_start && <li><strong>Начало эфира:</strong> {np.first_slot_start} МСК</li>}
         <li><strong>Позиция:</strong> {np.position_used?.toFixed(0)} сек — {np.position_source}</li>
         <li><strong>stream_position.json:</strong> {sp.exists ? `есть (возраст ${sp.age_sec} сек)` : "НЕТ"}</li>
         {sp.raw && sp.raw.title && <li className="diag-hint">В файле: {sp.raw.title}</li>}
-        <li><strong>Пользователь видит:</strong> {resp.title || "—"} <span className="diag-hint">(источник: {resp.source})</span></li>
+        <li><strong>Пользователь видит:</strong> {resp.title ?? (resp.source ? "—" : "Нет трека (позиция вне расписания?)")} <span className="diag-hint">(источник: {resp.source || "—"})</span></li>
         <li><strong>Позиция по БД:</strong> {slotDb.title || "—"}</li>
         {slotReal.title && <li><strong>По реальным длительностям:</strong> {slotReal.title}</li>}
         {np.icecast && <li>Icecast: {np.icecast}</li>}
