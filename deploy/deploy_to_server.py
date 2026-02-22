@@ -133,11 +133,11 @@ def main(dry_run=False):
             run(client, f"cd {APP_DIR} && python3 -m venv venv")
             run(client, f"{APP_DIR}/venv/bin/pip install -q -r {APP_DIR}/backend/requirements.txt")
 
-        # 4. Frontend: npm install + build
+        # 4. Frontend: npm install + build (NODE_OPTIONS — лимит памяти, иначе OOM на слабых серверах)
         print(f"{prefix}Сборка frontend...")
         if not dry_run:
             run(client, f"cd {APP_DIR}/frontend && npm ci --silent 2>/dev/null || npm install --silent")
-            run(client, f"cd {APP_DIR}/frontend && VITE_API_URL=https://navoradio.com npm run build")
+            run(client, f"cd {APP_DIR}/frontend && NODE_OPTIONS=--max-old-space-size=1536 VITE_API_URL=https://navoradio.com npm run build")
 
         # 5. Nginx config
         print(f"{prefix}Обновление nginx...")
@@ -201,6 +201,46 @@ def key_and_restart(ssh):
     return 0
 
 
+def frontend_local_build(client):
+    """Собрать frontend локально и загрузить dist на сервер. Обход OOM на слабых серверах."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    frontend_dir = os.path.join(project_root, "frontend")
+    dist_dir = os.path.join(frontend_dir, "dist")
+    if not os.path.exists(frontend_dir):
+        print("frontend/ не найден")
+        return 1
+    print("Сборка frontend локально...")
+    import subprocess
+    env = os.environ.copy()
+    env["VITE_API_URL"] = "https://navoradio.com"
+    cmd = "npm run build" if os.name == "nt" else ["npm", "run", "build"]
+    r = subprocess.run(cmd, cwd=frontend_dir, env=env, capture_output=True, text=True, shell=(os.name == "nt"))
+    if r.returncode != 0:
+        print(f"Ошибка сборки:\n{r.stderr}")
+        return 1
+    if not os.path.exists(dist_dir):
+        print("dist/ не создан")
+        return 1
+    print("Загрузка dist/ на сервер...")
+    sftp = client.open_sftp()
+    remote_dist = f"{APP_DIR}/frontend/dist"
+    run(client, f"rm -rf {remote_dist}/*")
+    run(client, f"mkdir -p {remote_dist}")
+    for root, dirs, files in os.walk(dist_dir):
+        rel = os.path.relpath(root, dist_dir)
+        for f in files:
+            local = os.path.join(root, f)
+            rpath = os.path.join(rel, f) if rel != "." else f
+            remote = f"{remote_dist}/{rpath}".replace("\\", "/")
+            remote_dir = os.path.dirname(remote)
+            run(client, f"mkdir -p {remote_dir}", check=False)
+            sftp.put(local, remote)
+    sftp.close()
+    print("Готово. Frontend обновлён.")
+    return 0
+
+
 def nginx_only(client):
     """Только обновить nginx config и reload."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -217,6 +257,17 @@ def nginx_only(client):
 
 
 if __name__ == "__main__":
+    if "--frontend-local" in sys.argv:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(HOST, username=USER, password=PASSWORD, timeout=15)
+            sys.exit(frontend_local_build(client))
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            sys.exit(1)
+        finally:
+            client.close()
     if "--nginx-only" in sys.argv:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
