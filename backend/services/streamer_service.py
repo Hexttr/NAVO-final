@@ -329,10 +329,10 @@ def get_broadcast_schedule_hash(db: Session, broadcast_date: date) -> str:
     return str(hash(tuple(parts)))
 
 
-def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Path | None, int, float, str]]:
+def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple]:
     """
-    Get playlist: list of (path|None, start_sec, duration_sec, entity_type).
-    Включает ВСЕ элементы эфира в том же порядке, что и админка — для синхронизации подсветки.
+    Get playlist: (path|None, start_sec, duration_sec, entity_type, entity_id, title).
+    Включает ВСЕ элементы эфира в том же порядке, что и админка.
     path=None — файл не найден, будет тишина.
     """
     items = (
@@ -349,7 +349,17 @@ def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple[Pat
         p = _get_audio_path(db, item.entity_type, item.entity_id)
         start_sec = _parse_time(item.start_time)
         dur = float(item.duration_seconds or 0)
-        result.append((p, start_sec, dur, item.entity_type))
+        title = None
+        if item.metadata_json:
+            try:
+                meta = json.loads(item.metadata_json)
+                title = meta.get("title", "")
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not title:
+            from services.broadcast_service import get_entity_meta
+            title = get_entity_meta(db, item.entity_type, item.entity_id)
+        result.append((p, start_sec, dur, item.entity_type, item.entity_id, title or "—"))
     return result
 
 
@@ -370,6 +380,16 @@ def _find_current_position(playlist: list[tuple], now_sec: int) -> tuple[int, in
     if playlist:
         return len(playlist) - 1, int(playlist[-1][2])  # конец последнего
     return 0, 0
+
+
+def _find_track_at_position(playlist: list[tuple], pos_sec: float) -> tuple[str, int, str] | None:
+    """Трек в позиции pos_sec (сек от полуночи). При loop — pos % 86400."""
+    pos = pos_sec % 86400 if pos_sec >= 86400 else pos_sec
+    for item in playlist:
+        start_sec, dur = item[1], item[2]
+        if start_sec <= pos < start_sec + dur:
+            return (item[3], item[4], item[5] if len(item) > 5 else "—")
+    return None
 
 
 def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
@@ -602,7 +622,11 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
                 if on_position and (time.time() - last_position_write) >= 2.0:
                     pos = stream_start_position_sec + (time.time() - stream_start)
                     try:
-                        on_position(pos)
+                        track = _find_track_at_position(playlist, pos)
+                        if track:
+                            on_position(pos, track[0], track[1], track[2])
+                        else:
+                            on_position(pos)
                     except Exception:
                         pass
                     last_position_write = time.time()

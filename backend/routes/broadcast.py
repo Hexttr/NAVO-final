@@ -180,12 +180,13 @@ def debug_time(
 @router.get("/now-playing")
 def get_now_playing(
     d: date = Query(..., description="Date YYYY-MM-DD"),
-    position: float | None = Query(None, description="Секунды от полуночи МСК — позиция в потоке (для точного совпадения с эфиром)"),
+    position: float | None = Query(None, description="Секунды от полуночи МСК — для HLS (позиция в потоке)"),
     db: Session = Depends(get_db),
 ):
-    """Текущий трек по расписанию (Москва UTC+3). Возвращает title для отображения «Сейчас играет».
-    Приоритет: 1) position от клиента (HLS/плеер — фактическая позиция), 2) stream_position.json (Icecast), 3) время сервера."""
+    """Текущий трек. Простой путь: источник стрима пишет что играет в файл — API просто читает.
+    Fallback: position от HLS или вычисление по расписанию."""
     from fastapi.responses import JSONResponse
+    from services.stream_position import read_now_playing, read_stream_position
     from services.streamer_service import moscow_seconds_now
     import json
     import logging
@@ -198,20 +199,27 @@ def get_now_playing(
         ensure_broadcast_for_date(db, d)
         broadcast_date = d
 
-        stream_pos = None
-        try:
-            from services.stream_position import read_stream_position
-            stream_pos = read_stream_position()
-        except Exception as e:
-            logger.warning("read_stream_position failed: %s", e)
+        # 1. Источник стрима (Icecast) пишет что играет — читаем без вычислений
+        np = read_now_playing()
+        if np and "entity_type" in np:
+            return JSONResponse(
+                content={
+                    "entityType": np["entity_type"],
+                    "entityId": np["entity_id"],
+                    "currentTime": np["currentTime"],
+                    "title": np.get("title", "—"),
+                },
+                headers=cache_headers,
+            )
 
+        # 2. Fallback: position от HLS или stream_position
+        stream_pos = read_stream_position()
         if position is not None and position >= 0:
             now_sec = float(position)
         elif stream_pos is not None:
             now_sec = float(stream_pos)
         else:
             now_sec = moscow_seconds_now()
-
         now_sec = max(0, min(86400, now_sec))
         h, m, s = int(now_sec) // 3600, (int(now_sec) % 3600) // 60, int(now_sec) % 60
         current_time = f"{h:02d}:{m:02d}:{s:02d}"
