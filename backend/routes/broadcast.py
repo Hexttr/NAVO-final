@@ -387,22 +387,29 @@ def get_now_playing(
         # 1. Источник стрима (Icecast) пишет что играет — читаем без вычислений
         np = read_now_playing()
         if np and "entity_type" in np:
+            raw_title = np.get("title", "—")
+            if not raw_title or raw_title == "—":
+                try:
+                    raw_title = get_entity_meta(db, np["entity_type"], np["entity_id"])
+                except Exception:
+                    raw_title = "—"
             return JSONResponse(
                 content={
                     "entityType": np["entity_type"],
                     "entityId": np["entity_id"],
                     "currentTime": np["currentTime"],
-                    "title": np.get("title", "—"),
+                    "title": raw_title or "—",
                 },
                 headers=cache_headers,
             )
 
-        # 2. Fallback: position от HLS или stream_position
+        # 2. Fallback: stream_position (источник правды) > position от HLS > moscow_seconds_now
+        # Пользователь и админка должны видеть одно и то же — что играет в Icecast.
         stream_pos = read_stream_position()
-        if position is not None and position >= 0:
-            now_sec = float(position)
-        elif stream_pos is not None:
+        if stream_pos is not None:
             now_sec = float(stream_pos)
+        elif position is not None and position >= 0:
+            now_sec = float(position)
         else:
             now_sec = moscow_seconds_now()
         now_sec = max(0, min(86400, now_sec))
