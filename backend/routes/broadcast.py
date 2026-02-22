@@ -89,6 +89,7 @@ def get_playlist_urls(
 @router.get("/diagnostics/now-playing")
 def diagnostics_now_playing(
     d: date | None = Query(None, description="Date YYYY-MM-DD"),
+    real_durations: bool = Query(False, description="Пересчёт по реальным длительностям (медленно, 877 ffprobe)"),
     db: Session = Depends(get_db),
 ):
     """
@@ -146,10 +147,8 @@ def diagnostics_now_playing(
                 }
                 break
 
-    # 6. Слот по реальным длительностям
-    playlist_real = get_playlist_with_times(db, broadcast_date, use_real_durations=True)
-    slot_real = _find_track_at_position(playlist_real, position_used) if playlist_real else None
-    slot_real_detail = None
+    # 6. Слот по реальным длительностям (опционально — медленно)
+    playlist_real = get_playlist_with_times(db, broadcast_date, use_real_durations=True) if real_durations else None
     if playlist_real:
         cum = 0
         for item in playlist_real:
