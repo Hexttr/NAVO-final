@@ -17,6 +17,14 @@ export async function getDiagnostics() {
   return r.json();
 }
 
+/** Диагностика «Сейчас играет» — для отладки рассинхрона */
+export async function getDiagnosticsNowPlaying(date = null) {
+  const base = API.replace("/api", "") || "";
+  const d = date || moscowDateStr();
+  const r = await fetch(`${base}/api/broadcast/diagnostics/now-playing?d=${d}`, { cache: "no-store" });
+  return r.json();
+}
+
 export async function getSongs() {
   const r = await fetch(`${API}/songs`);
   return r.json();
