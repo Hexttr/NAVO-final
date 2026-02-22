@@ -19,7 +19,6 @@ from database import SessionLocal
 from services.stream_position import write_stream_position
 from services.streamer_service import (
     get_playlist_with_times,
-    stream_broadcast_async,
     stream_broadcast_ffmpeg_concat,
     moscow_date,
     moscow_seconds_now,
@@ -32,9 +31,6 @@ ICECAST_HOST = os.environ.get("ICECAST_HOST", "127.0.0.1")
 ICECAST_PORT = int(os.environ.get("ICECAST_PORT", "8001"))
 ICECAST_MOUNT = os.environ.get("ICECAST_MOUNT", "live")
 ICECAST_SOURCE_PASSWORD = os.environ.get("ICECAST_SOURCE_PASSWORD", "navo-icecast-source-2024")
-# STREAM_MODE=ffmpeg_concat — единый формат, без обрезки на стыках; async — сырая конкатенация (обрезает DJ)
-STREAM_MODE = os.environ.get("STREAM_MODE", "ffmpeg_concat").lower()
-CHUNK_SIZE = 32 * 1024
 
 shutdown = False
 
@@ -83,15 +79,13 @@ def main():
             try:
                 now_sec = moscow_seconds_now()
                 start_idx, seek_sec = _find_current_position(playlist, now_sec)
-                stream_start_position = now_sec
-                stream_start_wall_time = time.time()
             except Exception as e:
                 _log(f"Ошибка определения позиции: {e}")
                 await asyncio.sleep(10)
                 continue
 
             h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
-            _log(f"Стриминг эфира в Icecast ({len(playlist)} треков, mode={STREAM_MODE}), старт: idx={start_idx} seek={seek_sec}s ({h:02d}:{m:02d}:{s:02d} МСК)")
+            _log(f"Стриминг эфира в Icecast ({len(playlist)} треков), старт: idx={start_idx} seek={seek_sec}s ({h:02d}:{m:02d}:{s:02d} МСК)")
             icecast_url = f"icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}/{ICECAST_MOUNT}"
             ffmpeg_cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
@@ -106,7 +100,6 @@ def main():
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            use_ffmpeg_concat = STREAM_MODE == "ffmpeg_concat"
             # Плейлист с реальными длительностями — для точного «Сейчас играет». Строится в фоне.
             playlist_ref = [playlist]
 
@@ -120,17 +113,13 @@ def main():
                 except Exception as e:
                     _log(f"Ошибка построения плейлиста с реальными длительностями: {e}")
 
-            if use_ffmpeg_concat:
-                asyncio.create_task(build_real_playlist())
+            asyncio.create_task(build_real_playlist())
 
             async def stream_chunks():
-                if use_ffmpeg_concat:
-                    gen = stream_broadcast_ffmpeg_concat(
-                        playlist, sync_to_moscow=True, on_position=write_stream_position,
-                        playlist_for_track_lookup=playlist_ref,
-                    )
-                else:
-                    gen = stream_broadcast_async(playlist, sync_to_moscow=True)
+                gen = stream_broadcast_ffmpeg_concat(
+                    playlist, sync_to_moscow=True, on_position=write_stream_position,
+                    playlist_for_track_lookup=playlist_ref,
+                )
                 async for chunk in gen:
                     if shutdown:
                         return
@@ -138,17 +127,6 @@ def main():
                     await proc.stdin.drain()
 
             stream_task = asyncio.create_task(stream_chunks())
-
-            async def write_position_loop():
-                """Позиция для async mode (ffmpeg_concat пишет через on_position)."""
-                while not shutdown and not stream_task.done():
-                    await asyncio.sleep(2)
-                    if shutdown or stream_task.done():
-                        return
-                    pos = stream_start_position + (time.time() - stream_start_wall_time)
-                    write_stream_position(pos)
-
-            position_task = asyncio.create_task(write_position_loop()) if not use_ffmpeg_concat else None
 
             async def check_schedule():
                 nonlocal schedule_changed
@@ -193,12 +171,6 @@ def main():
                     await watchdog_task
                 except asyncio.CancelledError:
                     pass
-                if position_task:
-                    position_task.cancel()
-                    try:
-                        await position_task
-                    except asyncio.CancelledError:
-                        pass
                 checker_task.cancel()
                 try:
                     await checker_task

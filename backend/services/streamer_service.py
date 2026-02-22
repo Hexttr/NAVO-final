@@ -207,39 +207,6 @@ def get_entity_duration_from_file(db: Session, entity_type: str, entity_id: int)
 CHUNK_SIZE = 32 * 1024  # 32 KB
 
 
-def resolve_broadcast_date(db: Session, requested_date: date) -> date:
-    """
-    Возвращает последнюю дату с эфиром (включая requested_date).
-    Сканирует назад до 7 дней.
-    """
-    for days_back in range(8):
-        d = requested_date - timedelta(days=days_back)
-        has_items = (
-            db.query(BroadcastItem)
-            .filter(
-                BroadcastItem.broadcast_date == d,
-                BroadcastItem.entity_type != "empty",
-            )
-            .first()
-        )
-        if has_items:
-            return d
-    return requested_date
-
-
-def _is_date_explicitly_deleted(db: Session, d: date) -> bool:
-    """Дата в списке явно удалённых — не восстанавливать копированием."""
-    from models import Setting
-    row = db.query(Setting).filter(Setting.key == "deleted_broadcast_dates").first()
-    if not row or not row.value:
-        return False
-    try:
-        dates = json.loads(row.value)
-        return str(d) in (dates if isinstance(dates, list) else [])
-    except (json.JSONDecodeError, TypeError):
-        return False
-
-
 def _mark_broadcast_deleted(db: Session, d: date, deleted: bool) -> None:
     """Добавить/убрать дату из списка явно удалённых."""
     from models import Setting
@@ -267,39 +234,29 @@ def _mark_broadcast_deleted(db: Session, d: date, deleted: bool) -> None:
 
 def ensure_broadcast_for_date(db: Session, target_date: date) -> bool:
     """
-    Если на target_date нет эфира — копируем с последней даты, где он есть.
-    Не копируем, если дата явно удалена админом (ждём новую генерацию).
-    Возвращает True если была копия, False если эфир уже был или нечего копировать.
+    Проверка наличия эфира на дату. Автокопирование отключено — используйте кнопку «Скопировать эфир на завтра».
     """
-    if _is_date_explicitly_deleted(db, target_date):
-        return False
-    has_items = (
-        db.query(BroadcastItem)
-        .filter(
-            BroadcastItem.broadcast_date == target_date,
-            BroadcastItem.entity_type != "empty",
-        )
-        .first()
-    )
-    if has_items:
-        return False
+    return False
 
-    source_date = resolve_broadcast_date(db, target_date)
-    if source_date == target_date:
-        return False  # нет источника для копирования
 
+def copy_broadcast_to_date(db: Session, from_date: date, to_date: date) -> int:
+    """
+    Скопировать эфир с from_date на to_date. Перезаписывает to_date.
+    Возвращает количество скопированных слотов.
+    """
     source_items = (
         db.query(BroadcastItem)
-        .filter(BroadcastItem.broadcast_date == source_date)
+        .filter(BroadcastItem.broadcast_date == from_date)
         .order_by(BroadcastItem.sort_order)
         .all()
     )
     if not source_items:
-        return False
+        raise ValueError(f"Нет эфира на дату {from_date}")
 
+    db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == to_date).delete()
     for item in source_items:
         db.add(BroadcastItem(
-            broadcast_date=target_date,
+            broadcast_date=to_date,
             entity_type=item.entity_type,
             entity_id=item.entity_id,
             start_time=item.start_time,
@@ -309,10 +266,9 @@ def ensure_broadcast_for_date(db: Session, target_date: date) -> bool:
             metadata_json=item.metadata_json or "{}",
         ))
     db.commit()
-    # Пересчёт длительностей из файлов — тайминги сразу по расписанию
     from services.broadcast_service import recalc_broadcast_for_date
-    recalc_broadcast_for_date(db, target_date)
-    return True
+    recalc_broadcast_for_date(db, to_date)
+    return len(source_items)
 
 
 def get_broadcast_schedule_hash(db: Session, broadcast_date: date) -> str:

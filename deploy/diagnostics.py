@@ -97,7 +97,7 @@ def main():
             print(f"    moscow_date: {d.get('moscow_date', '?')}")
             print(f"    broadcast_items: {checks.get('broadcast_items', 0)}")
             print(f"    broadcast_ready: {checks.get('broadcast_ready', False)}")
-            print(f"    hls_ready: {checks.get('hls_ready', False)}")
+            print(f"    icecast_live: {checks.get('icecast_live', '?')}")
             print(f"    stream_ready: {checks.get('stream_ready', False)}")
             if d.get("error"):
                 print(f"    ERROR: {d['error']}")
@@ -114,14 +114,7 @@ def main():
     icon = "[OK]" if stream_ok else "[--]"
     print(f"    {icon} HTTP {http_code}")
 
-    # 6. HLS log tail
-    print("\n[6] HLS генерация (последние 5 строк лога):")
-    out, _, _ = run(client, "tail -5 /opt/navo-radio/uploads/hls_generation.log 2>/dev/null || echo '(лог не найден)'")
-    for line in (out or "").strip().split("\n"):
-        if line.strip():
-            print(f"    {line}")
-
-    # 7. navo-radio-source journal (last errors)
+    # 6. navo-radio-source journal (last errors)
     print("\n[7] navo-radio-source (последние ошибки journalctl):")
     out, _, _ = run(client, "journalctl -u navo-radio-source -n 8 --no-pager 2>/dev/null | tail -8")
     for line in (out or "").strip().split("\n"):

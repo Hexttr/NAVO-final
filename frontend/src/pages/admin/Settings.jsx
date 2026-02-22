@@ -9,6 +9,23 @@ const SLOT_TYPES = [
   { value: "podcast", label: "Подкаст" },
 ];
 
+const WEATHER_REGION_OPTIONS = [
+  { value: "dushanbe", label: "Душанбе" },
+  { value: "moscow", label: "Москва" },
+  { value: "spb", label: "Санкт-Петербург" },
+  { value: "almaty", label: "Алматы" },
+  { value: "tashkent", label: "Ташкент" },
+  { value: "bishkek", label: "Бишкек" },
+  { value: "ashgabat", label: "Ашхабад" },
+];
+
+const NEWS_REGION_OPTIONS = [
+  { value: "tajikistan", label: "Таджикистан" },
+  { value: "russia", label: "Россия" },
+  { value: "central_asia", label: "Центральная Азия" },
+  { value: "mixed", label: "Смешанный" },
+];
+
 export default function Settings() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -110,6 +127,7 @@ export default function Settings() {
           <h3>Тэги Jamendo</h3>
           <p className="settings-hint">
             Поисковые запросы для выборки музыки. Каждый тэг — отдельный запрос к API Jamendo.
+            Для загрузки треков нужен JAMENDO_CLIENT_ID в .env (получить на jamendo.com).
           </p>
           <div className="jamendo-tags-compact">
             {(data.jamendo_tags || []).map((tag, idx) => (
@@ -135,14 +153,14 @@ export default function Settings() {
         <div className="settings-regions-row">
           <section className="settings-section">
             <h3>Регион для погоды</h3>
-            <p className="settings-hint">Город для прогноза (WeatherAPI).</p>
+            <p className="settings-hint">Город для прогноза. Нужен WEATHER_API_KEY в .env (weatherapi.com).</p>
             <div className="settings-select-row">
               <select
                 value={data.weather_region || "dushanbe"}
                 onChange={(e) => setData((d) => ({ ...d, weather_region: e.target.value }))}
                 className="settings-select"
               >
-                {(data.weather_region_options || []).map((opt) => (
+                {(data.weather_region_options || WEATHER_REGION_OPTIONS).map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
@@ -150,14 +168,14 @@ export default function Settings() {
           </section>
           <section className="settings-section">
             <h3>Регион для новостей</h3>
-            <p className="settings-hint">Набор RSS-источников.</p>
+            <p className="settings-hint">Набор RSS-источников для новостей.</p>
             <div className="settings-select-row">
               <select
                 value={data.news_region || "tajikistan"}
                 onChange={(e) => setData((d) => ({ ...d, news_region: e.target.value }))}
                 className="settings-select"
               >
-                {(data.news_region_options || []).map((opt) => (
+                {(data.news_region_options || NEWS_REGION_OPTIONS).map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
@@ -169,7 +187,7 @@ export default function Settings() {
         <section className="settings-section">
           <h3>Модель для генерации текстов</h3>
           <p className="settings-hint">
-            Groq (бесплатно, ограничения) или ChatGPT (OpenAI, платно). API-ключи в .env на сервере.
+            Groq (бесплатно) или ChatGPT (OpenAI, платно). Ключ ChatGPT вводится ниже при выборе.
           </p>
           <div className="settings-select-row">
             <select
@@ -181,6 +199,21 @@ export default function Settings() {
               <option value="openai">ChatGPT (OpenAI)</option>
             </select>
           </div>
+          {data.llm_provider === "openai" && (
+            <div style={{ marginTop: "10px" }}>
+              <label>API ключ OpenAI (ChatGPT):</label>
+              <input
+                type="password"
+                value={data.openai_api_key || ""}
+                onChange={(e) => setData((d) => ({ ...d, openai_api_key: e.target.value }))}
+                className="settings-textarea"
+                placeholder="sk-..."
+              />
+              <p className="settings-hint" style={{ marginTop: "5px" }}>
+                Ключ сохраняется в настройках. Без ключа генерация DJ/новостей/погоды не сработает.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* LLM prompts */}

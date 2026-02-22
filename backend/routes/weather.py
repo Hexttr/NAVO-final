@@ -70,10 +70,21 @@ async def generate_weather(
     d: date | None = Query(None, description="Дата для новой записи YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
+    if not settings.weather_api_key:
+        raise HTTPException(
+            400,
+            "WEATHER_API_KEY не задан. Добавьте ключ в .env (получить на weatherapi.com).",
+        )
     region = get(db, "weather_region") or "dushanbe"
     city = WEATHER_REGIONS.get(region, ("Душанбе", "Dushanbe"))[1]
-    raw = await fetch_weather_forecast(city)
-    text = await generate_weather_text(db, raw)
+    try:
+        raw = await fetch_weather_forecast(city)
+    except Exception as e:
+        raise HTTPException(502, f"Ошибка WeatherAPI: {str(e)}")
+    try:
+        text = await generate_weather_text(db, raw)
+    except Exception as e:
+        raise HTTPException(502, f"Ошибка LLM (проверьте GROQ_API_KEY или OPENAI_API_KEY): {str(e)}")
     w = Weather(text=text, broadcast_date=d)
     db.add(w)
     db.commit()
@@ -89,10 +100,17 @@ async def regenerate_weather(
     db: Session = Depends(get_db),
 ):
     """Перегенерировать: создаёт НОВУЮ запись на дату d, обновляет слот. Иначе — перезаписывает текущую."""
+    if not settings.weather_api_key:
+        raise HTTPException(400, "WEATHER_API_KEY не задан. Добавьте ключ в .env (weatherapi.com).")
     region = get(db, "weather_region") or "dushanbe"
     city = WEATHER_REGIONS.get(region, ("Душанбе", "Dushanbe"))[1]
-    raw = await fetch_weather_forecast(city)
-    text = await generate_weather_text(db, raw)
+    try:
+        raw = await fetch_weather_forecast(city)
+        text = await generate_weather_text(db, raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"Ошибка: {str(e)}")
 
     if d is not None:
         w = Weather(text=text, broadcast_date=d)

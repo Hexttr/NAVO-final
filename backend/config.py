@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     base_url: str = "https://navoradio.com"
     # URL стрима для плеера (относительный /stream или полный https://...)
     stream_url: str = "/stream"
+    # URL Icecast для плеера (приоритет). Локально: http://localhost:8001/live. Продакшен: https://navoradio.com/live
+    icecast_stream_url: str = Field(default="http://localhost:8001/live", validation_alias="ICECAST_STREAM_URL")
     # STREAM_BITRATE: 128k, 256k, 320k, 512k — выше = лучше качество, ~4× трафик
     stream_bitrate: str = "256k"
     # Смещение эфира в секундах: +120 = на 2 мин вперёд (если запаздывает), -60 = на 1 мин назад

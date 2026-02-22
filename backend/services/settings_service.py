@@ -38,6 +38,7 @@ DEFAULTS = {
     "weather_region": "dushanbe",
     "news_region": "tajikistan",
     "elevenlabs_api_key_frontend": "",
+    "openai_api_key": "",
 }
 
 WEATHER_REGIONS = {

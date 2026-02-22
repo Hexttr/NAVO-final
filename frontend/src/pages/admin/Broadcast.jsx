@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2, ChevronDown, ChevronUp, Loader2, Calculator } from "lucide-react";
+import { Sparkles, Trash2, Pencil, Play, Square, X, RotateCcw, Save, Volume2, ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
 import {
   moscowDateStr,
   getBroadcast,
   getBroadcastNowPlaying,
   generateBroadcast,
   deleteBroadcast,
-  generateHls,
-  getHlsStatus,
-  recalcBroadcastDurations,
+  copyBroadcastToDate,
   deleteBroadcastItem,
   insertBroadcastItem,
   moveBroadcastItem,
@@ -36,31 +34,6 @@ import {
   getIntroAudioUrl,
 } from "../../api";
 import "./Broadcast.css";
-
-const HLS_GENERATING_KEY = "navo_hls_generating";
-const HLS_POLL_INTERVAL_MS = 15000;
-const HLS_TIMEOUT_MS = 45 * 60 * 1000;
-
-function getHlsGeneratingDates() {
-  try {
-    const raw = localStorage.getItem(HLS_GENERATING_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function setHlsGenerating(date, startedAt = Date.now()) {
-  const map = getHlsGeneratingDates();
-  map[date] = startedAt;
-  localStorage.setItem(HLS_GENERATING_KEY, JSON.stringify(map));
-}
-
-function clearHlsGenerating(date) {
-  const map = getHlsGeneratingDates();
-  delete map[date];
-  localStorage.setItem(HLS_GENERATING_KEY, JSON.stringify(Object.keys(map).length ? map : {}));
-}
 
 const TYPE_LABELS = {
   song: "Песня",
@@ -89,7 +62,7 @@ export default function Broadcast() {
   const [revoicingId, setRevoicingId] = useState(null);
   const [regeneratingId, setRegeneratingId] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [recalcLoading, setRecalcLoading] = useState(false);
+  const [copyLoading, setCopyLoading] = useState(false);
   const [voices, setVoices] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
@@ -106,39 +79,6 @@ export default function Broadcast() {
     lastViewIndexRef.current = null;
     load();
   }, [selectedDate]);
-
-  const [generatingHls, setGeneratingHls] = useState(false);
-
-  useEffect(() => {
-    const map = getHlsGeneratingDates();
-    setGeneratingHls(!!map[selectedDate]);
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (!generatingHls) return;
-    const map = getHlsGeneratingDates();
-    const startedAt = map[selectedDate];
-    if (!startedAt) return;
-    if (Date.now() - startedAt > HLS_TIMEOUT_MS) {
-      clearHlsGenerating(selectedDate);
-      setGeneratingHls(false);
-      return;
-    }
-    const poll = async () => {
-      try {
-        const st = await getHlsStatus(selectedDate);
-        if (st?.hasHls && !st?.generation_in_progress) {
-          clearHlsGenerating(selectedDate);
-          setGeneratingHls(false);
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    poll();
-    const id = setInterval(poll, HLS_POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [generatingHls, selectedDate]);
 
   useEffect(() => {
     if (expandedId) lastViewIndexRef.current = null;
@@ -223,8 +163,6 @@ export default function Broadcast() {
       await generateBroadcast(selectedDate);
       setConfirmGen(false);
       load();
-      setHlsGenerating(selectedDate);
-      setGeneratingHls(true);
     } catch (e) {
       alert(e.message || "Ошибка генерации");
     } finally {
@@ -487,12 +425,12 @@ export default function Broadcast() {
       <div className="broadcast-actions">
         <div className="broadcast-actions-left">
           <button
-            className={`broadcast-btn broadcast-btn-generate ${confirmGen ? "confirm" : ""}`}
+            className={`broadcast-btn broadcast-btn-generate ${confirmGen ? "confirm" : ""} ${generating ? "broadcast-btn-recalc-active" : ""}`}
             onClick={handleGenerate}
             disabled={loading || generating}
           >
-            <Sparkles size={16} />
-            {confirmGen ? "ПОДТВЕРДИТЬ ПЕРЕЗАПИСЬ?" : "Сгенерировать эфир"}
+            {generating ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
+            {confirmGen ? "ПОДТВЕРДИТЬ ПЕРЕЗАПИСЬ?" : generating ? "Генерирую…" : "Сгенерировать эфир"}
           </button>
           {confirmGen && (
             <button className="broadcast-btn broadcast-btn-cancel" onClick={() => setConfirmGen(false)}>
@@ -508,42 +446,24 @@ export default function Broadcast() {
             {deleting ? "…" : "Удалить эфир"}
           </button>
           <button
-            className={`broadcast-btn broadcast-btn-secondary broadcast-btn-hls ${generatingHls ? "broadcast-btn-hls-active" : ""}`}
+            className={`broadcast-btn broadcast-btn-secondary ${copyLoading ? "broadcast-btn-recalc-active" : ""}`}
             onClick={async () => {
+              setCopyLoading(true);
               try {
-                await generateHls(selectedDate);
-                setHlsGenerating(selectedDate);
-                setGeneratingHls(true);
-              } catch (e) {
-                alert(e.message || "Ошибка");
-              }
-            }}
-            disabled={loading || generatingHls || items.length === 0}
-            title="Обновить HLS после изменений расписания (~10-30 мин для суток эфира)"
-          >
-            {generatingHls ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
-            {generatingHls ? "Обновляю HLS" : "Обновить HLS"}
-          </button>
-          <button
-            className={`broadcast-btn broadcast-btn-secondary ${recalcLoading ? "broadcast-btn-recalc-active" : ""}`}
-            onClick={async () => {
-              setRecalcLoading(true);
-              try {
-                const r = await recalcBroadcastDurations();
-                const msg = r?.message || `Обновлено: ${r?.total ?? 0} записей`;
+                await copyBroadcastToDate(selectedDate, "tomorrow");
                 await load();
-                alert(msg);
+                alert("Эфир скопирован на завтра.");
               } catch (e) {
                 alert(e.message || "Ошибка");
               } finally {
-                setRecalcLoading(false);
+                setCopyLoading(false);
               }
             }}
-            disabled={loading || recalcLoading || items.length === 0}
-            title="Пересчитать длительности из файлов (ffprobe) — обновит start_time, end_time для точного расписания"
+            disabled={loading || copyLoading || items.length === 0}
+            title="Скопировать текущий эфир на завтра — будет играть то же самое"
           >
-            {recalcLoading ? <Loader2 size={16} className="spin" /> : <Calculator size={16} />}
-            {recalcLoading ? "Пересчитываю…" : "Пересчитать длительности"}
+            {copyLoading ? <Loader2 size={16} className="spin" /> : <Copy size={16} />}
+            {copyLoading ? "Копирую…" : "Скопировать эфир на завтра"}
           </button>
         </div>
         <div className="broadcast-actions-count">

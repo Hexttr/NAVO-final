@@ -236,7 +236,9 @@ export async function createWeather(text, broadcastDate) {
 export async function generateWeather(broadcastDate) {
   const url = broadcastDate ? `${API}/weather/generate?d=${broadcastDate}` : `${API}/weather/generate`;
   const r = await fetch(url, { method: "POST" });
-  return r.json();
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || data.message || `Ошибка ${r.status}`);
+  return data;
 }
 
 export async function regenerateWeatherText(weatherId, broadcastDate, broadcastItemId) {
@@ -340,44 +342,15 @@ export async function getBroadcastPlaylistUrls(date, sync = true) {
   return r.json();
 }
 
-/** Метаданные для «Сейчас играет» — fallback когда metadata.json 404 */
-export async function getPlaylistMetadata(date) {
-  const r = await fetch(`${API}/broadcast/playlist-metadata?d=${date}`);
-  if (!r.ok) return null;
-  return r.json();
-}
-
-/** Возвращает { url, startPosition }. startPosition — секунды от полуночи МСК (с сервера). */
-export async function getHlsUrl(date) {
-  const r = await fetch(`${API}/broadcast/hls-url?d=${date}`);
-  const data = await r.json();
-  return { url: data?.url || null, startPosition: data?.startPosition ?? null };
-}
-
-/** Подсказка: использовать /stream напрямую при Icecast 404 */
-export async function getPlaybackHint() {
+/** URL для плеера: Icecast (приоритет) и /stream (fallback). */
+export async function getStreamUrl() {
   const base = API.replace("/api", "") || "";
-  const r = await fetch(`${base}/api/playback-hint`, { cache: "no-store" });
-  return r.json().catch(() => ({ preferStream: false }));
-}
-
-export async function getHlsStatus(date) {
-  const r = await fetch(`${API}/broadcast/hls-status?d=${date}`);
+  const r = await fetch(`${base}/api/broadcast/stream-url`, { cache: "no-store" });
   const data = await r.json();
-  return data;
-}
-
-export async function generateHls(date) {
-  const r = await fetch(`${API}/broadcast/generate-hls?d=${date}`, { method: "POST" });
-  const text = await r.text();
-  try {
-    const data = JSON.parse(text);
-    if (!r.ok) throw new Error(data.detail || data.error || "Ошибка");
-    return data;
-  } catch (e) {
-    if (e instanceof SyntaxError) throw new Error(r.status === 500 ? "Ошибка сервера" : text || "Ошибка");
-    throw e;
-  }
+  return {
+    icecastUrl: data?.icecastUrl || "http://localhost:8001/live",
+    streamUrl: data?.streamUrl || base + "/stream",
+  };
 }
 
 export async function getBroadcastNowPlaying(date, positionSec = null) {
@@ -405,13 +378,16 @@ export async function generateBroadcast(date) {
   }
 }
 
-export async function recalcBroadcastDurations() {
-  const r = await fetch(`${API}/broadcast/recalc-durations`, { method: "POST" });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const msg = Array.isArray(data.detail) ? data.detail[0]?.msg : data.detail;
-    throw new Error(msg || `Ошибка ${r.status}`);
+/** Скопировать эфир с fromDate на toDate. toDate: YYYY-MM-DD или "tomorrow" */
+export async function copyBroadcastToDate(fromDate, toDate) {
+  if (toDate === "tomorrow") {
+    const d = new Date(fromDate + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    toDate = d.toISOString().slice(0, 10);
   }
+  const r = await fetch(`${API}/broadcast/copy?from=${fromDate}&to=${toDate}`, { method: "POST" });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || data.message || `Ошибка ${r.status}`);
   return data;
 }
 

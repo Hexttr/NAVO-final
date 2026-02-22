@@ -15,7 +15,6 @@ from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
 from services.streamer_service import get_entity_duration_from_file, get_playlist_with_times, ensure_broadcast_for_date
-from services.hls_service import generate_hls, get_hls_url
 from config import settings
 
 router = APIRouter(prefix="/broadcast", tags=["broadcast"])
@@ -365,11 +364,11 @@ def debug_time(
 @router.get("/now-playing")
 def get_now_playing(
     d: date = Query(..., description="Date YYYY-MM-DD"),
-    position: float | None = Query(None, description="Секунды от полуночи МСК — для HLS (позиция в потоке)"),
+    position: float | None = Query(None, description="Секунды от полуночи МСК — для /stream fallback"),
     db: Session = Depends(get_db),
 ):
     """Текущий трек. Простой путь: источник стрима пишет что играет в файл — API просто читает.
-    Fallback: position от HLS или вычисление по расписанию."""
+    Fallback: position от /stream или вычисление по расписанию."""
     from fastapi.responses import JSONResponse
     from services.stream_position import read_now_playing, read_stream_position
     from services.streamer_service import moscow_seconds_now
@@ -403,7 +402,7 @@ def get_now_playing(
                 headers=cache_headers,
             )
 
-        # 2. Fallback: stream_position (источник правды) > position от HLS > moscow_seconds_now
+        # 2. Fallback: stream_position (источник правды) > position от /stream > moscow_seconds_now
         # Пользователь и админка должны видеть одно и то же — что играет в Icecast.
         stream_pos = read_stream_position()
         if stream_pos is not None:
@@ -547,20 +546,20 @@ def delete_broadcast(
     return {"date": str(d), "deleted": deleted, "message": "Эфир удалён"}
 
 
-@router.post("/recalc-durations")
-def recalc_all_durations(db: Session = Depends(get_db)):
-    """Пересчитать длительность всех аудио из файлов (ffprobe). Обновляет сущности и BroadcastItem — точное совпадение админки и эфира."""
-    from services.broadcast_service import recalc_all_durations as recalc_svc
+@router.post("/copy")
+def copy_broadcast(
+    from_date: date = Query(..., alias="from", description="Дата источника YYYY-MM-DD"),
+    to_date: date = Query(..., alias="to", description="Дата назначения YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Скопировать эфир с одной даты на другую."""
+    from services.streamer_service import copy_broadcast_to_date
 
     try:
-        updated = recalc_svc(db)
-        total = sum(updated.values())
-        return {"updated": updated, "total": total, "message": f"Обновлено: {updated['songs']} песен, {updated['podcasts']} подкастов, {updated['intros']} интро, {updated['news']} новостей, {updated['weather']} погод, {updated['broadcast_items']} слотов эфира"}
-    except Exception as e:
-        db.rollback()
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, str(e)[:200])
+        count = copy_broadcast_to_date(db, from_date, to_date)
+        return {"from": str(from_date), "to": str(to_date), "count": count, "message": f"Скопировано {count} слотов."}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/generate")
@@ -580,8 +579,7 @@ def generate(
             _mark_broadcast_deleted(db, d, deleted=False)
             from services.broadcast_service import recalc_broadcast_for_date
             recalc_broadcast_for_date(db, d)
-            _spawn_hls_generation(d)
-            return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован. HLS генерируется в фоне (~10-30 мин)."}
+            return {"date": str(d), "count": len(items), "message": "Эфир сгенерирован."}
         except ValueError as e:
             db.rollback()
             raise HTTPException(400, str(e))
@@ -592,50 +590,13 @@ def generate(
                 continue
             raise HTTPException(
                 503 if "locked" in str(e).lower() else 500,
-                "База занята (Icecast/HLS). Подождите 10–20 сек и повторите." if "locked" in str(e).lower() else str(e),
+                "База занята. Подождите 10–20 сек и повторите." if "locked" in str(e).lower() else str(e),
             )
         except Exception as e:
             db.rollback()
             import traceback
             traceback.print_exc()
             raise HTTPException(500, str(e))
-
-
-def _spawn_hls_generation(d: date) -> int | None:
-    """Запускает генерацию HLS в отдельном процессе. Возвращает PID или None при ошибке.
-    Создаёт lock-файл — не запускает второй процесс для той же даты."""
-    try:
-        backend_dir = Path(__file__).resolve().parent.parent
-        project_root = backend_dir.parent
-        run_script = backend_dir / "run_hls.py"
-        log_path = project_root / "uploads" / "hls_generation.log"
-        lock_path = _hls_generating_lock_path(d)
-        if not run_script.exists():
-            return None
-        if lock_path.exists():
-            return None  # Уже запущена — run_hls удалит lock по завершении
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            lock_path.write_text(f"pid={os.getpid()}", encoding="utf-8")
-        except OSError:
-            return None
-        log_file = open(log_path, "a", encoding="utf-8")
-        log_file.write(f"\n=== HLS {d} (from schedule change) ===\n")
-        log_file.flush()
-        proc = subprocess.Popen(
-            [sys.executable, str(run_script), str(d)],
-            cwd=str(backend_dir),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            env={**os.environ},
-            start_new_session=True,
-        )
-        log_file.write(f"PID: {proc.pid}\n")
-        log_file.flush()
-        log_file.close()
-        return proc.pid
-    except Exception:
-        return None
 
 
 @router.post("/swap")
@@ -658,7 +619,6 @@ def swap_items(
         it.sort_order = i
     recalc_times(db, d, items)
     db.commit()
-    _spawn_hls_generation(d)
     return {"ok": True}
 
 
@@ -682,7 +642,6 @@ def delete_item(
     items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
     recalc_times(db, d, items)
     db.commit()
-    _spawn_hls_generation(d)
     return {"ok": True}
 
 
@@ -714,7 +673,6 @@ def insert_into_slot(
     items = db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == d).order_by(BroadcastItem.sort_order).all()
     recalc_times(db, d, items)
     db.commit()
-    _spawn_hls_generation(d)
     return {"ok": True}
 
 
@@ -742,177 +700,20 @@ def move_item(
         it.sort_order = i
     recalc_times(db, d, items)
     db.commit()
-    _spawn_hls_generation(d)
     return {"ok": True}
 
 
 @router.get("/stream-url")
 def get_stream_url():
-    """Return stream URL for frontend player. Относительный /stream или полный из STREAM_URL."""
-    url = getattr(settings, "stream_url", None) or "/stream"
-    if url.startswith(("http://", "https://")):
-        return {"url": url}
-    base = settings.base_url.rstrip("/")
-    return {"url": f"{base}/{url.lstrip('/')}"}
-
-
-@router.get("/playlist-metadata")
-def playlist_metadata(
-    d: date = Query(..., description="Date YYYY-MM-DD"),
-    db: Session = Depends(get_db),
-):
-    """Метаданные для «Сейчас играет»: {tracks: [{start, end, title}]}. Fallback когда metadata.json 404."""
-    from services.hls_service import get_playlist_metadata
-
-    ensure_broadcast_for_date(db, d)
-    return get_playlist_metadata(db, d)
-
-
-@router.get("/hls-url")
-def hls_url(
-    d: date = Query(..., description="Date YYYY-MM-DD"),
-    db: Session = Depends(get_db),
-):
-    """URL HLS если готов, иначе null. startPosition — секунды от полуночи МСК для seek, ограничено длительностью потока."""
-    from services.streamer_service import moscow_seconds_now
-    from services.hls_service import get_hls_stream_duration_sec, _get_hls_dir
-
-    ensure_broadcast_for_date(db, d)
-    url = get_hls_url(db, d)
-    now_sec = moscow_seconds_now()
-    start_position = now_sec
-    hls_duration_sec = None
-    if url and url.startswith("/hls/"):
-        parts = url.split("/")
-        if len(parts) >= 5:
-            hls_date, hls_hash = parts[2], parts[3]
-            m3u8_path = _get_hls_dir() / hls_date / hls_hash / "stream.m3u8"
-            if m3u8_path.exists():
-                dur = get_hls_stream_duration_sec(m3u8_path)
-                if dur is not None:
-                    hls_duration_sec = round(dur, 1)
-                    if now_sec > dur:
-                        start_position = max(0, int(dur) - 10)
-                    # HLS закончится через <60 сек — лучше сразу /stream (бесконечный)
-                    if now_sec > dur - 60:
-                        url = None
-                else:
-                    start_position = 0
-    return {"url": url, "hasHls": url is not None, "startPosition": start_position, "hlsDurationSec": hls_duration_sec}
-
-
-def _hls_generating_lock_path(d: date) -> Path:
-    project_root = Path(__file__).resolve().parent.parent.parent
-    return project_root / "uploads" / f"hls_generating_{d}.lock"
-
-
-@router.get("/hls-status")
-def hls_status(
-    d: date = Query(..., description="Date YYYY-MM-DD"),
-    db: Session = Depends(get_db),
-):
-    """Статус HLS. hasHls=true если есть любой доступный HLS. generation_in_progress=true если run_hls ещё работает."""
-    from services.streamer_service import get_broadcast_schedule_hash
-    from services.hls_service import get_hls_path, get_hls_url
-
-    ensure_broadcast_for_date(db, d)
-    playlist = get_playlist_with_times(db, d)
-    if not playlist:
-        return {"ok": False, "error": "Нет эфира на дату", "hasHls": False, "generation_in_progress": False}
-
-    url = get_hls_url(db, d)
-    schedule_hash = get_broadcast_schedule_hash(db, d)
-    out_dir = get_hls_path(d, schedule_hash)
-    m3u8_path = out_dir / "stream.m3u8"
-    date_dir = out_dir.parent
-    existing_hashes = []
-    if date_dir.exists():
-        existing_hashes = [p.name for p in date_dir.iterdir() if p.is_dir() and (p / "stream.m3u8").exists()]
-
-    generation_in_progress = _hls_generating_lock_path(d).exists()
-
-    return {
-        "ok": True,
-        "hasHls": url is not None,
-        "generation_in_progress": generation_in_progress,
-        "url": url,
-        "schedule_hash": schedule_hash,
-        "m3u8_path": str(m3u8_path),
-        "exact_ready": m3u8_path.exists(),
-        "out_dir_exists": out_dir.exists(),
-        "playlist_count": len(playlist),
-        "existing_hashes": existing_hashes,
-    }
-
-
-@router.get("/hls-log")
-def get_hls_log(lines: int = Query(200, description="Last N lines")):
-    """Последние строки лога генерации HLS (для отладки)."""
-    project_root = Path(__file__).resolve().parent.parent.parent
-    log_path = project_root / "uploads" / "hls_generation.log"
-    if not log_path.exists():
-        return {"ok": True, "log": "(лог пуст или не создан)", "path": str(log_path)}
-    try:
-        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-            all_lines = f.readlines()
-        last = all_lines[-lines:] if len(all_lines) > lines else all_lines
-        return {"ok": True, "log": "".join(last), "path": str(log_path), "total_lines": len(all_lines)}
-    except Exception as e:
-        return {"ok": False, "error": str(e), "path": str(log_path)}
-
-
-@router.post("/generate-hls")
-def trigger_generate_hls(
-    d: date = Query(..., description="Date YYYY-MM-DD"),
-    db: Session = Depends(get_db),
-):
-    """Запустить генерацию HLS в отдельном процессе. 10-30 мин для суток эфира (857 треков)."""
-    try:
-        playlist = get_playlist_with_times(db, d)
-        if not playlist:
-            raise HTTPException(404, "Нет эфира на дату. Сгенерируйте сетку.")
-
-        backend_dir = Path(__file__).resolve().parent.parent
-        project_root = backend_dir.parent
-        python_exe = Path(sys.executable)
-        run_script = backend_dir / "run_hls.py"
-        log_path = project_root / "uploads" / "hls_generation.log"
-        lock_path = _hls_generating_lock_path(d)
-
-        if lock_path.exists():
-            raise HTTPException(409, "Генерация HLS уже запущена. Подождите завершения (~10–30 мин).")
-
-        if not run_script.exists():
-            raise HTTPException(500, "run_hls.py не найден")
-
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            lock_path.write_text(f"pid={os.getpid()}", encoding="utf-8")
-        except OSError:
-            pass
-        log_file = open(log_path, "a", encoding="utf-8")
-        log_file.write(f"\n=== HLS {d} started [code: concat-fix] (PID will follow) ===\n")
-        log_file.flush()
-
-        proc = subprocess.Popen(
-            [str(python_exe), str(run_script), str(d)],
-            cwd=str(backend_dir),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            env={**os.environ},
-            start_new_session=True,
-        )
-        log_file.write(f"PID: {proc.pid}\n")
-        log_file.flush()
-        log_file.close()
-        return {
-            "ok": True,
-            "message": f"Генерация HLS запущена (PID {proc.pid}). ~10-30 мин для {len(playlist)} треков. Лог: uploads/hls_generation.log",
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, str(e))
+    """Return stream URL for frontend player. Icecast приоритет, fallback /stream."""
+    icecast_url = getattr(settings, "icecast_stream_url", None) or "http://localhost:8001/live"
+    stream_rel = getattr(settings, "stream_url", None) or "/stream"
+    if stream_rel.startswith(("http://", "https://")):
+        stream_full = stream_rel
+    else:
+        base = settings.base_url.rstrip("/") or "http://localhost:8000"
+        stream_full = f"{base}/{stream_rel.lstrip('/')}"
+    return {"icecastUrl": icecast_url, "streamUrl": stream_full}
 
 
 @router.get("/debug-concat")

@@ -41,6 +41,11 @@ Thumbs.db
 # Uploads & media
 backend/uploads/
 
+# Icecast logs (локальная разработка)
+dev/icecast_logs/
+
 # SQLite
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3

@@ -14,8 +14,7 @@ c.connect(HOST, username=USER, password=PASSWORD, timeout=15)
 for name, cmd in [
     ("Icecast /live", "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/live"),
     ("stream_position", "cat /opt/navo-radio/uploads/stream_position.json 2>/dev/null || echo 'not found'"),
-    ("HLS dir", "ls /opt/navo-radio/uploads/hls/ 2>/dev/null"),
-    ("HLS today", "ls /opt/navo-radio/uploads/hls/2026-02-21/ 2>/dev/null || echo 'no HLS for today'"),
+    ("Icecast", "curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8001/live 2>/dev/null || echo 'unreachable'"),
     ("navo-source status", "systemctl is-active navo-radio-source"),
     ("icecast port", "grep port /etc/icecast2/icecast.xml 2>/dev/null | head -2"),
 ]:

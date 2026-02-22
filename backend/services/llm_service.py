@@ -47,16 +47,16 @@ async def generate_weather_text(db: Session, weather_data: str) -> str:
 async def _call_llm(db: Session, system_prompt: str, user_content: str) -> str:
     provider = get(db, "llm_provider") or "groq"
     if provider == "openai":
-        return await _call_openai(system_prompt, user_content)
+        return await _call_openai(db, system_prompt, user_content)
     return await _call_groq(system_prompt, user_content)
 
 
-async def _call_openai(system_prompt: str, user_content: str) -> str:
+async def _call_openai(db: Session, system_prompt: str, user_content: str) -> str:
     import httpx
     import os
-    api_key = getattr(config_settings, "openai_api_key", None) or os.environ.get("OPENAI_API_KEY", "") or ""
+    api_key = get(db, "openai_api_key") or getattr(config_settings, "openai_api_key", None) or os.environ.get("OPENAI_API_KEY", "") or ""
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY не задан в .env. Добавьте ключ для использования ChatGPT.")
+        raise RuntimeError("API ключ OpenAI не задан. Выберите ChatGPT в настройках и введите ключ.")
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(
@@ -66,7 +66,7 @@ async def _call_openai(system_prompt: str, user_content: str) -> str:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "gpt-5.2",
+                    "model": "gpt-4o-mini",
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content},

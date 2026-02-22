@@ -20,9 +20,9 @@
 1. **Сетка эфира** генерируется в админке («Сгенерировать эфир») — `broadcast_generator.py`
 2. Эфир — 24 часа, фиксированные слоты (новости, погода, подкасты по часам), между ними — песни
 3. **Воспроизведение**: 
-   - Приоритет **HLS** (`/hls/{date}/{hash}/stream.m3u8`) — предгенерированные сегменты
-   - Fallback **/stream** — живой MP3-поток от Icecast или backend
-4. **Icecast** (порт 8001) — единый поток для всех слушателей. Источник: `navo-radio-source` (icecast_source.py), который читает эфир из БД и стримит через FFmpeg
+   - Приоритет **Icecast** (`http://localhost:8001/live` или `https://navoradio.com/live`) — единый поток
+   - Fallback **/stream** — живой MP3 от backend (при недоступности Icecast)
+4. **Icecast** (порт 8001) — единый поток для всех слушателей. Источник: `icecast_source.py`, читает эфир из БД и стримит через FFmpeg concat (бесшовно)
 
 ### Технологии
 - Backend: FastAPI, SQLite, FFmpeg
@@ -32,11 +32,11 @@
 - Ключи в `.env`: JAMENDO_CLIENT_ID, GROQ_API_KEY, OPENAI_API_KEY, WEATHER_API_KEY, ELEVENLABS_API_KEY
 
 ### Ключевые файлы
-- `backend/services/streamer_service.py` — плейлист, синхронизация с Москвой, стриминг
+- `backend/services/streamer_service.py` — плейлист, синхронизация с Москвой, стриминг (ffmpeg_concat)
 - `backend/services/broadcast_generator.py` — генерация сетки
-- `backend/services/hls_service.py` — генерация HLS
 - `backend/icecast_source.py` — источник для Icecast
-- `frontend/src/pages/Player.jsx` — плеер (HLS или /stream)
+- `frontend/src/pages/Player.jsx` — плеер (Icecast или /stream)
+- `config/icecast.xml` — конфиг Icecast для проекта
 - `deploy/deploy_to_server.py` — деплой на Ubuntu-сервер
 
 ---

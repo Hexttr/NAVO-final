@@ -21,11 +21,11 @@ def main():
     print(json.dumps(data, indent=2, ensure_ascii=False))
     checks = data.get("checks", {})
     ok = data.get("ok", False)
-    hls_ready = checks.get("hls_ready", False)
-    hls_url = checks.get("hls_url", "")
+    broadcast_ready = checks.get("broadcast_ready", False)
+    icecast_live = checks.get("icecast_live", "?")
     print("\n--- Summary ---")
-    print(f"ok: {ok}, hls_ready: {hls_ready}, hls_url: {hls_url}")
-    return 0 if ok and hls_ready else 1
+    print(f"ok: {ok}, broadcast_ready: {broadcast_ready}, icecast: {icecast_live}")
+    return 0 if ok and broadcast_ready else 1
 
 
 if __name__ == "__main__":

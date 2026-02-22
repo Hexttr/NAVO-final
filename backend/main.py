@@ -99,13 +99,12 @@ def root():
 
 @app.get("/api/diagnostics")
 def diagnostics(db=Depends(get_db)):
-    """Диагностика: статус БД, эфир, HLS, stream, Icecast. Для отладки проблем воспроизведения."""
+    """Диагностика: статус БД, эфир, stream, Icecast. Для отладки проблем воспроизведения."""
     from datetime import datetime, timezone
     from urllib.request import urlopen
     from urllib.error import URLError, HTTPError
 
     from services.streamer_service import moscow_date, get_playlist_with_times, ensure_broadcast_for_date
-    from services.hls_service import get_hls_url
 
     result = {"ok": True, "ts": datetime.now(timezone.utc).isoformat(), "checks": {}}
     try:
@@ -129,15 +128,6 @@ def diagnostics(db=Depends(get_db)):
                 result["ok"] = False
         except Exception as e:
             result["checks"]["broadcast_playlist"] = f"ERROR: {e}"
-            result["ok"] = False
-
-        # HLS
-        try:
-            hls_url = get_hls_url(db, today)
-            result["checks"]["hls_ready"] = bool(hls_url)
-            result["checks"]["hls_url"] = hls_url
-        except Exception as e:
-            result["checks"]["hls"] = f"ERROR: {e}"
             result["ok"] = False
 
         # stream would work if we have playlist

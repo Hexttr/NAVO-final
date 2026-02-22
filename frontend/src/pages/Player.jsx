@@ -1,23 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
-import Hls from "hls.js";
-import { getBroadcastNowPlaying, getHlsUrl, moscowDateStr } from "../api";
+import { getBroadcastNowPlaying, getStreamUrl, moscowDateStr } from "../api";
 import "./Player.css";
 
-const STREAM_URL = "/stream";
-const HLS_CANPLAY_TIMEOUT_MS = 20000; // Если HLS не даёт canplay за 20 сек — fallback на /stream
 const EQ_BARS = 24;
 const BAR_COUNT = EQ_BARS;
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 2000;
-
-/** Текущая секунда дня по Москве (UTC+3) */
-function moscowSecondsNow() {
-  const d = new Date();
-  const moscowMs = d.getTime() + 3 * 3600 * 1000;
-  const m = new Date(moscowMs);
-  return m.getUTCHours() * 3600 + m.getUTCMinutes() * 60 + m.getUTCSeconds();
-}
 
 export default function Player() {
   const [playing, setPlaying] = useState(false);
@@ -26,142 +15,47 @@ export default function Player() {
   const [nowPlayingTitle, setNowPlayingTitle] = useState(null);
   const [barHeights, setBarHeights] = useState(() => Array(BAR_COUNT).fill(15));
   const [useAnalyser, setUseAnalyser] = useState(false);
-  const [audioReady, setAudioReady] = useState(false); // true когда audio реально играет (onPlay) — для Safari
+  const [audioReady, setAudioReady] = useState(false);
   const audioRef = useRef(null);
-  const hlsRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const sourceRef = useRef(null);
   const dataArrayRef = useRef(null);
   const rafRef = useRef(null);
   const retryCountRef = useRef(0);
-  const positionGetterRef = useRef(null);
-  const useStreamFallbackRef = useRef(false); // true = /stream, API использует stream_position
+  const useStreamFallbackRef = useRef(false);
 
   const playStream = async () => {
     if (!audioRef.current) return;
-    const today = moscowDateStr();
-    let { url: hlsUrl, startPosition: serverStartSec } = await getHlsUrl(today);
     const audio = audioRef.current;
-    const startSec = serverStartSec != null ? serverStartSec : moscowSecondsNow();
 
-    if (hlsUrl) {
-      try {
-        const base = window.location.origin;
-        const fullUrl = hlsUrl.startsWith("http") ? hlsUrl : base + hlsUrl;
-        const ac = new AbortController();
-        const t = setTimeout(() => ac.abort(), 5000);
-        try {
-          const probe = await fetch(fullUrl, { method: "HEAD", signal: ac.signal });
-          if (!probe.ok) hlsUrl = null;
-        } finally {
-          clearTimeout(t);
-        }
-      } catch {
-        hlsUrl = null;
-      }
-    }
+    try {
+      const { icecastUrl, streamUrl } = await getStreamUrl();
+      const base = window.location.origin;
+      const icecastFull = icecastUrl.startsWith("http") ? icecastUrl : base + icecastUrl;
+      const streamFull = streamUrl.startsWith("http") ? streamUrl : base + streamUrl;
+      const streamWithCacheBust = streamFull + (streamFull.includes("?") ? "&" : "?") + "t=" + Date.now();
 
-    if (hlsUrl) {
-      useStreamFallbackRef.current = false;
-      if (Hls.isSupported()) {
-        if (hlsRef.current) {
-          hlsRef.current.destroy();
-          hlsRef.current = null;
-        }
-        audio.removeAttribute("src");
-        const hlsConfig = {
-          startPosition: startSec,
-          maxBufferLength: 60,
-          maxMaxBufferLength: 120,
-        };
-        const hls = new Hls(hlsConfig);
-        hlsRef.current = hls;
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(audio);
-        positionGetterRef.current = () => audioRef.current?.currentTime ?? 0;
-        const hlsCanplayTimeout = setTimeout(() => {
-          if (hlsRef.current && audio.readyState < 2) {
-            hlsRef.current.destroy();
-            hlsRef.current = null;
-            playStreamFallback(serverStartSec);
-          }
-        }, HLS_CANPLAY_TIMEOUT_MS);
-        const clearCanplayTimeout = () => {
-          clearTimeout(hlsCanplayTimeout);
-        };
-        audio.addEventListener("canplay", clearCanplayTimeout, { once: true });
-        audio.addEventListener("playing", clearCanplayTimeout, { once: true });
-        audio.addEventListener("error", clearCanplayTimeout, { once: true });
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          clearTimeout(hlsCanplayTimeout);
-          if (data.fatal) {
-            hls.destroy();
-            hlsRef.current = null;
-            if (startSec > 0) {
-              const retry = new Hls({ ...hlsConfig, startPosition: 0 });
-              hlsRef.current = retry;
-              retry.loadSource(hlsUrl);
-              retry.attachMedia(audio);
-              retry.on(Hls.Events.ERROR, (__, d2) => {
-                if (d2.fatal) {
-                  retry.destroy();
-                  hlsRef.current = null;
-                  playStreamFallback(serverStartSec);
-                }
-              });
-              audio.play().catch(() => {});
-            } else {
-              playStreamFallback(serverStartSec);
-            }
-          }
-        });
-        audio.play().catch((e) => {
-          setError("Не удалось воспроизвести. Проверьте эфир в админке.");
-          setLoading(false);
-        });
-      } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
-        audio.src = hlsUrl;
-        positionGetterRef.current = () => audioRef.current?.currentTime ?? 0;
-        const seekToMoscow = () => {
-          if (audio.duration && isFinite(audio.duration)) {
-            audio.currentTime = Math.min(startSec, audio.duration);
-          }
-        };
-        const nativeHlsTimeout = setTimeout(() => {
-          if (audio.readyState < 2) playStreamFallback(serverStartSec);
-        }, HLS_CANPLAY_TIMEOUT_MS);
-        const onCanplay = () => { clearTimeout(nativeHlsTimeout); seekToMoscow(); };
-        audio.addEventListener("loadedmetadata", seekToMoscow, { once: true });
-        audio.addEventListener("canplay", onCanplay, { once: true });
-        audio.addEventListener("error", () => clearTimeout(nativeHlsTimeout), { once: true });
-        audio.play().catch((e) => {
-          setError("Не удалось воспроизвести.");
-          setLoading(false);
-        });
+      // Icecast не поддерживает HEAD — пробуем напрямую. При ошибке — fallback на /stream
+      if (useStreamFallbackRef.current) {
+        audio.src = streamWithCacheBust;
       } else {
-        playStreamFallback(serverStartSec);
+        audio.src = icecastFull;
       }
-    } else {
-      playStreamFallback(serverStartSec);
-    }
-  };
 
-  const playStreamFallback = (serverStartSec) => {
-    if (!audioRef.current) return;
-    useStreamFallbackRef.current = true;
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
+      audio.play().catch((e) => {
+        setError("Не удалось воспроизвести. Проверьте эфир в админке.");
+        setLoading(false);
+      });
+    } catch (e) {
+      useStreamFallbackRef.current = true;
+      const fallback = "http://localhost:8000/stream?t=" + Date.now();
+      audio.src = fallback;
+      audio.play().catch(() => {
+        setError("Не удалось воспроизвести. Проверьте эфир в админке.");
+        setLoading(false);
+      });
     }
-    const startSec = serverStartSec ?? moscowSecondsNow();
-    const playStartTime = Date.now();
-    positionGetterRef.current = () => startSec + (Date.now() - playStartTime) / 1000;
-    audioRef.current.src = STREAM_URL + "?t=" + Date.now();
-    audioRef.current.play().catch((e) => {
-      setError("Не удалось воспроизвести. Проверьте эфир в админке.");
-      setLoading(false);
-    });
   };
 
   const unlockAudioContext = () => {
@@ -182,12 +76,7 @@ export default function Player() {
     unlockAudioContext();
     if (playing) {
       setAudioReady(false);
-      positionGetterRef.current = null;
       useStreamFallbackRef.current = false;
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
       audioRef.current?.pause();
       setPlaying(false);
       return;
@@ -199,6 +88,7 @@ export default function Player() {
   };
 
   const handleAudioError = () => {
+    useStreamFallbackRef.current = true;
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1;
       setError(`Переподключение... (${retryCountRef.current}/${MAX_RETRIES})`);
@@ -210,19 +100,16 @@ export default function Player() {
   };
 
   useEffect(() => {
+    if (!playing) return;
     const poll = () => {
-      const pos = positionGetterRef.current?.();
-      // HLS: currentTime = позиция в потоке (сек от полуночи). Передаём в API.
-      // /stream: не передаём position — API использует stream_position (пишет backend).
-      const apiPos = useStreamFallbackRef.current ? null : (typeof pos === "number" && isFinite(pos) && pos >= 0 ? pos : null);
-      getBroadcastNowPlaying(moscowDateStr(), apiPos)
+      getBroadcastNowPlaying(moscowDateStr(), null)
         .then((r) => setNowPlayingTitle(r?.title || null))
         .catch(() => setNowPlayingTitle(null));
     };
     poll();
     const id = setInterval(poll, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [playing]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -240,9 +127,6 @@ export default function Player() {
     }
 
     let cancelled = false;
-
-    // Apple: iOS — все браузеры используют WebKit. Mac — Safari и др. getByteFrequencyData
-    // возвращает нули для live stream в WebKit. Fallback для всех Apple-устройств.
     const isApple = /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(navigator.userAgent);
     if (isApple) {
       setUseAnalyser(false);
@@ -258,9 +142,7 @@ export default function Player() {
         ctx = new AudioContextClass();
         audioContextRef.current = ctx;
       }
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
+      if (ctx.state === "suspended") await ctx.resume();
       if (cancelled) return;
 
       if (!sourceRef.current) {
@@ -288,7 +170,7 @@ export default function Player() {
 
       let frameCount = 0;
       let hadRealData = false;
-      const SAFARI_FALLBACK_FRAMES = 60; // ~1 сек: если нет данных — Safari (getByteFrequencyData=0 для live stream)
+      const SAFARI_FALLBACK_FRAMES = 60;
 
       const animate = () => {
         if (cancelled) return;
