@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Square } from "lucide-react";
 import Hls from "hls.js";
-import { getBroadcastNowPlaying, getHlsUrl, getPlaylistMetadata, moscowDateStr } from "../api";
+import { getBroadcastNowPlaying, getHlsUrl, moscowDateStr } from "../api";
 import "./Player.css";
 
 const STREAM_URL = "/stream";
@@ -36,9 +36,7 @@ export default function Player() {
   const rafRef = useRef(null);
   const retryCountRef = useRef(0);
   const positionGetterRef = useRef(null);
-  const metadataRef = useRef(null); // { tracks: [{start,end,title}] } — привязка к реальной позиции в HLS
-  const hlsStartPositionRef = useRef(null); // HLS: секунды от полуночи, currentTime — смещение от начала
-  const useStreamFallbackRef = useRef(false); // /stream: не передаём position, API использует stream_position
+  const useStreamFallbackRef = useRef(false); // true = /stream, API использует stream_position
 
   const playStream = async () => {
     if (!audioRef.current) return;
@@ -66,13 +64,6 @@ export default function Player() {
 
     if (hlsUrl) {
       useStreamFallbackRef.current = false;
-      hlsStartPositionRef.current = startSec;
-      metadataRef.current = null;
-      getPlaylistMetadata(today)
-        .then((data) => {
-          if (data?.tracks?.length) metadataRef.current = data;
-        })
-        .catch(() => {});
       if (Hls.isSupported()) {
         if (hlsRef.current) {
           hlsRef.current.destroy();
@@ -108,7 +99,6 @@ export default function Player() {
             hls.destroy();
             hlsRef.current = null;
             if (startSec > 0) {
-              hlsStartPositionRef.current = 0; // retry с начала потока
               const retry = new Hls({ ...hlsConfig, startPosition: 0 });
               hlsRef.current = retry;
               retry.loadSource(hlsUrl);
@@ -160,8 +150,6 @@ export default function Player() {
   const playStreamFallback = (serverStartSec) => {
     if (!audioRef.current) return;
     useStreamFallbackRef.current = true;
-    hlsStartPositionRef.current = null;
-    metadataRef.current = null;
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -196,7 +184,6 @@ export default function Player() {
       setAudioReady(false);
       positionGetterRef.current = null;
       useStreamFallbackRef.current = false;
-      hlsStartPositionRef.current = null;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -224,19 +211,10 @@ export default function Player() {
 
   useEffect(() => {
     const poll = () => {
-      let pos = positionGetterRef.current?.();
-      const meta = metadataRef.current;
-      // HLS: currentTime — смещение от начала потока, tracks — секунды от полуночи
-      if (pos != null && hlsStartPositionRef.current != null) {
-        pos = hlsStartPositionRef.current + pos;
-      }
-      // /stream: не передаём position — API использует stream_position (пишет backend при стриминге)
-      const apiPos = useStreamFallbackRef.current ? null : pos;
-      if (meta?.tracks?.length && pos != null && pos >= 0) {
-        const t = meta.tracks.find((tr) => pos >= tr.start && pos < tr.end);
-        setNowPlayingTitle(t?.title ?? null);
-        return;
-      }
+      const pos = positionGetterRef.current?.();
+      // HLS: currentTime = позиция в потоке (сек от полуночи). Передаём в API.
+      // /stream: не передаём position — API использует stream_position (пишет backend).
+      const apiPos = useStreamFallbackRef.current ? null : (typeof pos === "number" && isFinite(pos) && pos >= 0 ? pos : null);
       getBroadcastNowPlaying(moscowDateStr(), apiPos)
         .then((r) => setNowPlayingTitle(r?.title || null))
         .catch(() => setNowPlayingTitle(null));

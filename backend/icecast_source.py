@@ -90,10 +90,15 @@ def main():
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            stream_gen = stream_broadcast_ffmpeg_concat if STREAM_MODE == "ffmpeg_concat" else stream_broadcast_async
+            use_ffmpeg_concat = STREAM_MODE == "ffmpeg_concat"
+            stream_gen = stream_broadcast_ffmpeg_concat if use_ffmpeg_concat else stream_broadcast_async
 
             async def stream_chunks():
-                async for chunk in stream_gen(playlist, sync_to_moscow=True):
+                if use_ffmpeg_concat:
+                    gen = stream_broadcast_ffmpeg_concat(playlist, sync_to_moscow=True, on_position=write_stream_position)
+                else:
+                    gen = stream_broadcast_async(playlist, sync_to_moscow=True)
+                async for chunk in gen:
                     if shutdown:
                         return
                     proc.stdin.write(chunk)
@@ -102,7 +107,7 @@ def main():
             stream_task = asyncio.create_task(stream_chunks())
 
             async def write_position_loop():
-                """Пишем позицию потока каждые 2 сек — для синхронизации «Сейчас играет»."""
+                """Позиция для async mode (ffmpeg_concat пишет через on_position)."""
                 while not shutdown and not stream_task.done():
                     await asyncio.sleep(2)
                     if shutdown or stream_task.done():
@@ -110,7 +115,7 @@ def main():
                     pos = stream_start_position + (time.time() - stream_start_wall_time)
                     write_stream_position(pos)
 
-            position_task = asyncio.create_task(write_position_loop())
+            position_task = asyncio.create_task(write_position_loop()) if not use_ffmpeg_concat else None
 
             async def check_schedule():
                 nonlocal schedule_changed
@@ -138,11 +143,12 @@ def main():
             except (BrokenPipeError, ConnectionResetError):
                 pass
             finally:
-                position_task.cancel()
-                try:
-                    await position_task
-                except asyncio.CancelledError:
-                    pass
+                if position_task:
+                    position_task.cancel()
+                    try:
+                        await position_task
+                    except asyncio.CancelledError:
+                        pass
                 checker_task.cancel()
                 try:
                     await checker_task
