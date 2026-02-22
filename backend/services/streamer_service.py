@@ -388,9 +388,13 @@ def _find_current_position(playlist: list[tuple], now_sec: int) -> tuple[int, in
     return 0, 0
 
 
-def _find_track_at_position(playlist: list[tuple], pos_sec: float) -> tuple[str, int, str] | None:
-    """Трек в позиции pos_sec (сек от полуночи). При loop — pos % 86400."""
-    pos = pos_sec % 86400 if pos_sec >= 86400 else pos_sec
+def _find_track_at_position(playlist: list[tuple], pos_sec: float, total_sec: float | None = None) -> tuple[str, int, str] | None:
+    """Трек в позиции pos_sec. total_sec: для cumulative — wrap при loop; иначе pos % 86400."""
+    if total_sec and total_sec > 0 and pos_sec >= total_sec:
+        pos_sec = pos_sec % total_sec
+    elif not total_sec and pos_sec >= 86400:
+        pos_sec = pos_sec % 86400
+    pos = pos_sec
     for item in playlist:
         start_sec, dur = item[1], item[2]
         if start_sec <= pos < start_sec + dur:
@@ -633,14 +637,27 @@ async def stream_broadcast_ffmpeg_concat(
                     break
                 yield chunk
                 if on_position and (time.time() - last_position_write) >= 1.0:
-                    pos = stream_start_position_sec + (time.time() - stream_start)
+                    elapsed = time.time() - stream_start
+                    lookup_pl = playlist_for_track_lookup[0] if playlist_for_track_lookup and len(playlist_for_track_lookup) > 0 else playlist
+                    # Реальный плейлист: cumulative (сумма длительностей), без больших скачков.
+                    # Расписание: фиксированные слоты (9:00, 10:00) — скачки > 600 сек.
+                    use_cumulative = False
+                    if lookup_pl and len(lookup_pl) > 1 and start_idx < len(lookup_pl):
+                        if abs(lookup_pl[1][1] - (lookup_pl[0][1] + lookup_pl[0][2])) < 1:
+                            gaps = [lookup_pl[i + 1][1] - lookup_pl[i][1] for i in range(min(20, len(lookup_pl) - 1))]
+                            use_cumulative = not gaps or max(gaps) < 600
+                    if use_cumulative:
+                        lookup_pos = lookup_pl[start_idx][1] + total_seek + elapsed
+                        total_dur = lookup_pl[-1][1] + lookup_pl[-1][2] if lookup_pl else None
+                        track = _find_track_at_position(lookup_pl, lookup_pos, total_dur)
+                    else:
+                        track = _find_track_at_position(lookup_pl, stream_start_position_sec + elapsed)
+                    pos_for_api = stream_start_position_sec + elapsed
                     try:
-                        lookup_pl = playlist_for_track_lookup[0] if playlist_for_track_lookup and len(playlist_for_track_lookup) > 0 else playlist
-                        track = _find_track_at_position(lookup_pl, pos)
                         if track:
-                            on_position(pos, track[0], track[1], track[2])
+                            on_position(pos_for_api, track[0], track[1], track[2])
                         else:
-                            on_position(pos)
+                            on_position(pos_for_api)
                     except Exception:
                         pass
                     last_position_write = time.time()
