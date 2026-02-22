@@ -213,8 +213,24 @@ async def stream_audio(
     playlist = get_playlist_with_times(db, req_date)
     if not playlist:
         raise HTTPException(404, "Нет эфира на эту дату. Сгенерируйте сетку в админке.")
+    playlist_ref = [playlist]
+
+    async def build_real():
+        from database import SessionLocal
+        dbl = SessionLocal()
+        try:
+            pl = get_playlist_with_times(dbl, req_date, use_real_durations=True)
+            playlist_ref[0] = pl
+        finally:
+            dbl.close()
+
+    import asyncio
+    asyncio.create_task(build_real())
     return StreamingResponse(
-        stream_broadcast_ffmpeg_concat(playlist, sync_to_moscow=not from_start, on_position=write_stream_position),
+        stream_broadcast_ffmpeg_concat(
+            playlist, sync_to_moscow=not from_start, on_position=write_stream_position,
+            playlist_for_track_lookup=playlist_ref,
+        ),
         media_type="audio/mpeg",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",

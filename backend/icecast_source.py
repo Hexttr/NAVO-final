@@ -107,11 +107,28 @@ def main():
             )
 
             use_ffmpeg_concat = STREAM_MODE == "ffmpeg_concat"
-            stream_gen = stream_broadcast_ffmpeg_concat if use_ffmpeg_concat else stream_broadcast_async
+            # Плейлист с реальными длительностями — для точного «Сейчас играет». Строится в фоне.
+            playlist_ref = [playlist]
+
+            async def build_real_playlist():
+                try:
+                    db_real = SessionLocal()
+                    pl = get_playlist_with_times(db_real, today, use_real_durations=True)
+                    db_real.close()
+                    playlist_ref[0] = pl
+                    _log("Плейлист с реальными длительностями готов для now-playing")
+                except Exception as e:
+                    _log(f"Ошибка построения плейлиста с реальными длительностями: {e}")
+
+            if use_ffmpeg_concat:
+                asyncio.create_task(build_real_playlist())
 
             async def stream_chunks():
                 if use_ffmpeg_concat:
-                    gen = stream_broadcast_ffmpeg_concat(playlist, sync_to_moscow=True, on_position=write_stream_position)
+                    gen = stream_broadcast_ffmpeg_concat(
+                        playlist, sync_to_moscow=True, on_position=write_stream_position,
+                        playlist_for_track_lookup=playlist_ref,
+                    )
                 else:
                     gen = stream_broadcast_async(playlist, sync_to_moscow=True)
                 async for chunk in gen:

@@ -236,11 +236,20 @@ def get_now_playing(
         empty = {"entityType": None, "entityId": None, "currentTime": current_time, "title": None}
         if not items:
             return JSONResponse(content=empty, headers=cache_headers)
-        for it in items:
+        for i, it in enumerate(items):
             parts = (it.start_time or "00:00:00").split(":")
             start_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]) if len(parts) == 3 else 0
-            end_sec = start_sec + float(it.duration_seconds or 0)
+            dur_db = float(it.duration_seconds or 0)
+            end_sec = start_sec + dur_db
             if start_sec <= now_sec < end_sec:
+                # Уточнение: файл может быть короче, чем в БД — тогда мы уже в следующем треке
+                from services.streamer_service import get_entity_duration_from_file
+                try:
+                    real_dur = get_entity_duration_from_file(db, it.entity_type, it.entity_id)
+                    if real_dur > 0 and real_dur < dur_db - 1 and now_sec >= start_sec + real_dur and i + 1 < len(items):
+                        it = items[i + 1]
+                except Exception:
+                    pass
                 title = None
                 if it.metadata_json:
                     try:

@@ -11,6 +11,7 @@ from config import settings
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 STREAM_POSITION_FILE = "stream_position.json"
 MAX_AGE_SEC = 20  # данные считаются устаревшими через 20 сек
+MAX_AGE_WHEN_TRACK_KNOWN = 45  # когда известен трек — дольше доверяем (стрим пишет каждые 2 сек)
 
 
 def _get_path() -> Path | None:
@@ -51,6 +52,7 @@ def read_now_playing() -> dict | None:
     """
     Прочитать текущий трек из файла. Возвращает {entity_type, entity_id, title, currentTime}
     если данные свежие, иначе None. API без вычислений — просто читает.
+    Когда известен трек (entity_type) — допускаем больший возраст (стрим пишет каждые 2 сек).
     """
     try:
         path = _get_path()
@@ -58,7 +60,8 @@ def read_now_playing() -> dict | None:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         ts = data.get("timestamp", 0)
-        if time.time() - ts > MAX_AGE_SEC:
+        max_age = MAX_AGE_WHEN_TRACK_KNOWN if ("entity_type" in data and "entity_id" in data) else MAX_AGE_SEC
+        if time.time() - ts > max_age:
             return None
         pos = float(data.get("position_sec", 0))
         h, m, s = int(pos) // 3600, (int(pos) % 3600) // 60, int(pos) % 60

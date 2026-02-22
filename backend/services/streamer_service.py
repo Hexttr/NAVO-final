@@ -59,6 +59,7 @@ def _get_file_duration_sec(path: Path) -> float:
 
 from models import BroadcastItem, Song, News, Weather, Podcast, Intro
 
+
 # Сервер должен быть в Europe/Moscow. Используем local time напрямую.
 MOSCOW_TZ = timezone(timedelta(hours=3))
 
@@ -329,11 +330,10 @@ def get_broadcast_schedule_hash(db: Session, broadcast_date: date) -> str:
     return str(hash(tuple(parts)))
 
 
-def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple]:
+def get_playlist_with_times(db: Session, broadcast_date: date, use_real_durations: bool = False) -> list[tuple]:
     """
     Get playlist: (path|None, start_sec, duration_sec, entity_type, entity_id, title).
-    Включает ВСЕ элементы эфира в том же порядке, что и админка.
-    path=None — файл не найден, будет тишина.
+    use_real_durations: границы по реальным длительностям файлов (для точного now-playing).
     """
     items = (
         db.query(BroadcastItem)
@@ -345,10 +345,16 @@ def get_playlist_with_times(db: Session, broadcast_date: date) -> list[tuple]:
         .all()
     )
     result = []
+    cum_start = 0
     for item in items:
         p = _get_audio_path(db, item.entity_type, item.entity_id)
-        start_sec = _parse_time(item.start_time)
         dur = float(item.duration_seconds or 0)
+        if use_real_durations and p and p.exists():
+            real_dur = _get_file_duration_sec(p)
+            if real_dur > 0:
+                dur = real_dur
+        start_sec = cum_start if use_real_durations else _parse_time(item.start_time)
+        cum_start += int(dur)
         title = None
         if item.metadata_json:
             try:
@@ -568,7 +574,12 @@ def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None, star
     return Path(p)
 
 
-async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: bool = True, on_position=None):
+async def stream_broadcast_ffmpeg_concat(
+    playlist: list[tuple],
+    sync_to_moscow: bool = True,
+    on_position=None,
+    playlist_for_track_lookup: list | None = None,
+):
     """
     Один FFmpeg с concat + реэнкод 128k — единый формат, без обрывов при смене треков.
     Критично для Icecast: пауза >1 сек вызывает отключение источника.
@@ -621,10 +632,11 @@ async def stream_broadcast_ffmpeg_concat(playlist: list[tuple], sync_to_moscow: 
                 if not chunk:
                     break
                 yield chunk
-                if on_position and (time.time() - last_position_write) >= 2.0:
+                if on_position and (time.time() - last_position_write) >= 1.0:
                     pos = stream_start_position_sec + (time.time() - stream_start)
                     try:
-                        track = _find_track_at_position(playlist, pos)
+                        lookup_pl = playlist_for_track_lookup[0] if playlist_for_track_lookup and len(playlist_for_track_lookup) > 0 else playlist
+                        track = _find_track_at_position(lookup_pl, pos)
                         if track:
                             on_position(pos, track[0], track[1], track[2])
                         else:
