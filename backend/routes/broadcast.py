@@ -382,15 +382,23 @@ def generate(
 
 
 def _spawn_hls_generation(d: date) -> int | None:
-    """Запускает генерацию HLS в отдельном процессе. Возвращает PID или None при ошибке."""
+    """Запускает генерацию HLS в отдельном процессе. Возвращает PID или None при ошибке.
+    Создаёт lock-файл — не запускает второй процесс для той же даты."""
     try:
         backend_dir = Path(__file__).resolve().parent.parent
         project_root = backend_dir.parent
         run_script = backend_dir / "run_hls.py"
         log_path = project_root / "uploads" / "hls_generation.log"
+        lock_path = _hls_generating_lock_path(d)
         if not run_script.exists():
             return None
+        if lock_path.exists():
+            return None  # Уже запущена — run_hls удалит lock по завершении
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            lock_path.write_text(f"pid={os.getpid()}", encoding="utf-8")
+        except OSError:
+            return None
         log_file = open(log_path, "a", encoding="utf-8")
         log_file.write(f"\n=== HLS {d} (from schedule change) ===\n")
         log_file.flush()
@@ -520,8 +528,12 @@ def move_item(
 
 @router.get("/stream-url")
 def get_stream_url():
-    """Return Icecast stream URL for frontend player."""
-    return {"url": "http://localhost:8000/stream"}  # TODO: configure Icecast URL
+    """Return stream URL for frontend player. Относительный /stream или полный из STREAM_URL."""
+    url = getattr(settings, "stream_url", None) or "/stream"
+    if url.startswith(("http://", "https://")):
+        return {"url": url}
+    base = settings.base_url.rstrip("/")
+    return {"url": f"{base}/{url.lstrip('/')}"}
 
 
 @router.get("/playlist-metadata")

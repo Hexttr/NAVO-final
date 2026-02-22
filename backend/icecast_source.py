@@ -39,6 +39,10 @@ CHUNK_SIZE = 32 * 1024
 shutdown = False
 
 
+def _log(msg: str) -> None:
+    print(f"[icecast-source] {msg}", flush=True)
+
+
 def main():
     global shutdown
 
@@ -51,31 +55,43 @@ def main():
 
     async def run_source():
         schedule_changed = False
+        retry_delay = 5
         while not shutdown:
-            db = SessionLocal()
             try:
-                today = moscow_date()
-                copied = ensure_broadcast_for_date(db, today)
-                if copied:
-                    print(f"[icecast] Эфир скопирован на {today} (админ не сформировал)")
-                # recalc пропускаем в source — вызывает database locked при одновременном доступе с API.
-                # Длительности синхронизируются в админке при генерации и через recalc-durations.
-                playlist = get_playlist_with_times(db, today)
-                current_hash = get_broadcast_schedule_hash(db, today)
-            finally:
-                db.close()
+                db = SessionLocal()
+                try:
+                    today = moscow_date()
+                    copied = ensure_broadcast_for_date(db, today)
+                    if copied:
+                        _log(f"Эфир скопирован на {today} (админ не сформировал)")
+                    playlist = get_playlist_with_times(db, today)
+                    current_hash = get_broadcast_schedule_hash(db, today)
+                finally:
+                    db.close()
+            except Exception as e:
+                _log(f"Ошибка загрузки эфира: {e}")
+                await asyncio.sleep(min(retry_delay, 60))
+                retry_delay = min(retry_delay * 2, 60)
+                continue
+            retry_delay = 5
 
             if not playlist:
-                print("Нет эфира (ни на сегодня, ни на предыдущие дни). Ожидание 60 сек...")
+                _log("Нет эфира (ни на сегодня, ни на предыдущие дни). Ожидание 60 сек...")
                 await asyncio.sleep(60)
                 continue
 
-            now_sec = moscow_seconds_now()
-            start_idx, seek_sec = _find_current_position(playlist, now_sec)
-            stream_start_position = now_sec
-            stream_start_wall_time = time.time()
+            try:
+                now_sec = moscow_seconds_now()
+                start_idx, seek_sec = _find_current_position(playlist, now_sec)
+                stream_start_position = now_sec
+                stream_start_wall_time = time.time()
+            except Exception as e:
+                _log(f"Ошибка определения позиции: {e}")
+                await asyncio.sleep(10)
+                continue
+
             h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
-            print(f"Стриминг эфира в Icecast ({len(playlist)} треков, mode={STREAM_MODE}), старт: idx={start_idx} seek={seek_sec}s ({h:02d}:{m:02d}:{s:02d} МСК)")
+            _log(f"Стриминг эфира в Icecast ({len(playlist)} треков, mode={STREAM_MODE}), старт: idx={start_idx} seek={seek_sec}s ({h:02d}:{m:02d}:{s:02d} МСК)")
             icecast_url = f"icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}/{ICECAST_MOUNT}"
             ffmpeg_cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
@@ -130,6 +146,8 @@ def main():
                             schedule_changed = True
                             stream_task.cancel()
                             return
+                    except Exception as e:
+                        _log(f"Ошибка проверки расписания: {e}")
                     finally:
                         db2.close()
 
@@ -139,9 +157,11 @@ def main():
                 await stream_task
             except asyncio.CancelledError:
                 if schedule_changed:
-                    print("Эфирная сетка изменена — перезагрузка стрима...")
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+                    _log("Эфирная сетка изменена — перезагрузка стрима...")
+            except (BrokenPipeError, ConnectionResetError) as e:
+                _log(f"Соединение с Icecast разорвано: {e}")
+            except Exception as e:
+                _log(f"Ошибка стриминга: {e}")
             finally:
                 if position_task:
                     position_task.cancel()
@@ -156,14 +176,18 @@ def main():
                     pass
                 try:
                     proc.stdin.close()
-                    await proc.wait()
-                except Exception:
-                    pass
+                    exit_code = await proc.wait()
+                    if exit_code != 0:
+                        err = await proc.stderr.read() if proc.stderr else b""
+                        if err:
+                            _log(f"FFmpeg exit {exit_code}: {err.decode(errors='replace')[:500]}")
+                except Exception as e:
+                    _log(f"Ошибка при закрытии FFmpeg: {e}")
 
             if shutdown:
                 break
             if not schedule_changed:
-                print("Переподключение к Icecast через 5 сек...")
+                _log("Переподключение к Icecast через 5 сек...")
                 await asyncio.sleep(5)
             schedule_changed = False
 

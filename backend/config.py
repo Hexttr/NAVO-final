@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./navo.db"
     upload_dir: str = "uploads"
     base_url: str = "https://navoradio.com"
+    # URL стрима для плеера (относительный /stream или полный https://...)
+    stream_url: str = "/stream"
     # STREAM_BITRATE: 128k, 256k, 320k, 512k — выше = лучше качество, ~4× трафик
     stream_bitrate: str = "256k"
     # Смещение эфира в секундах: +120 = на 2 мин вперёд (если запаздывает), -60 = на 1 мин назад

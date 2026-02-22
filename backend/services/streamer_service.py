@@ -534,7 +534,8 @@ def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None, star
     # Элементы с start_from_idx до конца + с начала до start_from_idx (для зацикливания)
     indices = list(range(start_from_idx, len(playlist))) + list(range(0, start_from_idx))
     for idx in indices:
-        path, _, dur, _ = playlist[idx]
+        item = playlist[idx]
+        path, dur = item[0], item[2]  # (path, start_sec, dur, entity_type, entity_id, title)
         if path is not None and path.exists():
             lines.append(f"file '{_path_for_concat(path)}'")
             has_any = True
@@ -548,7 +549,8 @@ def _create_concat_file(playlist: list[tuple], out_dir: Path | None = None, star
     # Дублируем для зацикливания (только для live-стрима — не для HLS VOD)
     if loop_for_midnight:
         for idx in indices:
-            path, _, dur, _ = playlist[idx]
+            item = playlist[idx]
+            path, dur = item[0], item[2]
             if path is not None and path.exists():
                 lines.append(f"file '{_path_for_concat(path)}'")
             elif dur > 0:

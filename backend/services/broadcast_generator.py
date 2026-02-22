@@ -175,10 +175,10 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
 
     items = []
     for order, (start_sec, et, eid, dur_sec, meta) in enumerate(blocks):
-        h, m, s = _sec_to_hms(int(start_sec))
-        start = _time_str(h, m, s)
-        eh, em, es = _sec_to_hms(int(start_sec + dur_sec))
-        end = _time_str(eh, em, es)
+        h, m, s = sec_to_hms(int(start_sec))
+        start = time_str(h, m, s)
+        eh, em, es = sec_to_hms(int(start_sec + dur_sec))
+        end = time_str(eh, em, es)
         meta_safe = (meta or "")[:200]
         items.append(BroadcastItem(
             broadcast_date=broadcast_date,

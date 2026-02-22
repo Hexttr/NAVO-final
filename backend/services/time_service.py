@@ -37,7 +37,9 @@ def _fetch_moscow_from_api() -> tuple[date, int] | None:
         _CACHE_DATE = d
         _CACHE_SECONDS = sec
         return d, sec
-    except (URLError, HTTPError, ValueError, KeyError, OSError):
+    except (URLError, HTTPError, ValueError, KeyError, OSError) as e:
+        import sys
+        print(f"[time_service] worldtimeapi.org недоступен, используется системное время: {e}", file=sys.stderr, flush=True)
         return None
 
 
