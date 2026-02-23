@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     stream_bitrate: str = "256k"
     # Смещение эфира в секундах: +120 = на 2 мин вперёд (если запаздывает), -60 = на 1 мин назад
     sync_offset_seconds: int = 0
-    # Московское время: всегда системное (сервер в Europe/Moscow)
+    # Задержка «Сейчас в эфире» (сек): компенсация буферов FFmpeg/Icecast/плеера. 0 = без задержки.
+    now_playing_delay_seconds: int = 5
 
     class Config:
         env_file = str(_env_path)

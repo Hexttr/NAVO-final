@@ -383,10 +383,14 @@ def _find_track_at_position(playlist: list[tuple], pos_sec: float, total_sec: fl
     return None
 
 
-def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
+def stream_broadcast(
+    playlist: list[tuple],
+    sync_to_moscow: bool = True,
+    on_track_switch=None,
+):
     """
-    Async generator: yields MP3 bytes. Бесконечный цикл — поток не обрывается.
-    If sync_to_moscow=True, starts from current Moscow time position.
+    Yields MP3 bytes. Бесконечный цикл — поток не обрывается.
+    on_track_switch(position_sec, entity_type, entity_id, title) — вызывается в момент фактической смены трека.
     """
     if not playlist:
         return
@@ -397,11 +401,53 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
         start_idx, seek_sec = _find_current_position(playlist, now_sec)
     idx = start_idx
     first_round = True
+
+    last_pos_call = 0.0
+    delay_sec = getattr(settings, "now_playing_delay_seconds", 0) or 0
+    last_track = None
+    pending_track = None
+    pending_switch_time = 0.0
+    last_emitted_idx = None
+
+    def _emit_track(pos_sec=None):
+        nonlocal last_track, pending_track, pending_switch_time, last_emitted_idx
+        if not on_track_switch or idx >= len(playlist):
+            return
+        item = playlist[idx]
+        new_track = (item[3], item[4], item[5] if len(item) > 5 else "—")
+        p = moscow_seconds_now() if pos_sec is None else pos_sec
+        now = time.time()
+        if delay_sec > 0:
+            is_switch = last_emitted_idx != idx
+            if is_switch:
+                last_emitted_idx = idx
+                if pending_track is not None and (now - pending_switch_time) >= delay_sec:
+                    last_track = pending_track
+                    pending_track = None
+                pending_track = new_track
+                pending_switch_time = now
+                to_show = last_track if last_track is not None else new_track
+            else:
+                if pending_track is not None and (now - pending_switch_time) >= delay_sec:
+                    last_track = pending_track
+                    pending_track = None
+                to_show = last_track if last_track is not None else new_track
+        else:
+            last_track = new_track
+            to_show = new_track
+            last_emitted_idx = idx
+        try:
+            on_track_switch(p, to_show[0], to_show[1], to_show[2])
+        except Exception:
+            pass
+
     while True:
         try:
             item = playlist[idx]
             path = item[0]
             duration_sec = item[2]
+            _emit_track()
+            last_pos_call = time.time()
             # Файл отсутствует или не найден — генерируем тишину (сохраняем синхронизацию с расписанием)
             if path is None or not path.exists():
                 silence_dur = duration_sec
@@ -441,13 +487,15 @@ def stream_broadcast(playlist: list[tuple], sync_to_moscow: bool = True):
                         skip_bytes = _find_mp3_frame_sync(f, skip_bytes)
                         f.seek(skip_bytes)
                     else:
-                        # Всегда пропускать ID3 при чтении с начала — иначе первый файл без seek мог отдавать ID3 как аудио
                         _skip_id3_and_find_sync(f)
                     while True:
                         chunk = f.read(CHUNK_SIZE)
                         if not chunk:
                             break
                         yield chunk
+                        if on_track_switch and (time.time() - last_pos_call) >= 1.0:
+                            _emit_track()
+                            last_pos_call = time.time()
         except (StopIteration, GeneratorExit):
             raise
         except Exception:
@@ -666,14 +714,17 @@ async def stream_broadcast_ffmpeg_concat(
             pass
 
 
-async def stream_broadcast_async(playlist: list[tuple], sync_to_moscow: bool = True):
+async def stream_broadcast_async(
+    playlist: list[tuple],
+    sync_to_moscow: bool = True,
+    on_track_switch=None,
+):
     """
-    Async wrapper для stream_broadcast. Мгновенные переходы между файлами — без пауз,
-    в отличие от stream_broadcast_ffmpeg (где каждый файл = новый FFmpeg = задержка).
-    Для Icecast критично: пауза >1 сек может вызвать отключение источника.
+    Async wrapper для stream_broadcast. Мгновенные переходы между файлами — без пауз.
+    on_track_switch вызывается в момент фактической смены трека.
     """
     n = 0
-    for chunk in stream_broadcast(playlist, sync_to_moscow):
+    for chunk in stream_broadcast(playlist, sync_to_moscow, on_track_switch=on_track_switch):
         yield chunk
         n += 1
         if n % 8 == 0:

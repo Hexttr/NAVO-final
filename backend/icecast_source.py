@@ -20,7 +20,7 @@ from services.stream_position import write_stream_position
 from utils.time_utils import sec_to_hms, time_str
 from services.streamer_service import (
     get_playlist_with_times,
-    stream_broadcast_ffmpeg_concat,
+    stream_broadcast_async,
     moscow_date,
     moscow_seconds_now,
     ensure_broadcast_for_date,
@@ -103,11 +103,17 @@ def main():
                     _log(f"Icecast доступен (HTTP {r.status})")
             except Exception as e:
                 _log(f"ВНИМАНИЕ: Icecast не отвечает на {ICECAST_HOST}:{ICECAST_PORT} — {e}. Запустите dev\\start_icecast.bat")
+            bitrate = "256k"
+            try:
+                from config import settings
+                bitrate = getattr(settings, "stream_bitrate", "256k") or "256k"
+            except Exception:
+                pass
             ffmpeg_cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-re", "-f", "mp3", "-i", "pipe:0",
-                "-c", "copy", "-content_type", "audio/mpeg",
-                "-f", "mp3", icecast_url,
+                "-c:a", "libmp3lame", "-b:a", bitrate, "-ar", "44100", "-ac", "2",
+                "-content_type", "audio/mpeg", "-f", "mp3", icecast_url,
             ]
             proc = await asyncio.create_subprocess_exec(
                 *ffmpeg_cmd,
@@ -132,21 +138,12 @@ def main():
 
             asyncio.create_task(log_ffmpeg_stderr())
 
-            # Плейлист с реальными длительностями — ДО старта стрима, иначе границы треков (DJ→песня) неверны
-            try:
-                db_real = SessionLocal()
-                playlist_real = get_playlist_with_times(db_real, today, use_real_durations=True)
-                db_real.close()
-                playlist_ref = [playlist_real]
-                _log("Плейлист с реальными длительностями готов для now-playing")
-            except Exception as e:
-                _log(f"Ошибка плейлиста с реальными длительностями: {e}, используем БД")
-                playlist_ref = [playlist]
-
+            # playlist — по расписанию (start_time из БД), иначе _find_current_position даёт неверный слот
             async def stream_chunks():
-                gen = stream_broadcast_ffmpeg_concat(
-                    playlist, sync_to_moscow=True, on_position=write_stream_position,
-                    playlist_for_track_lookup=playlist_ref,
+                gen = stream_broadcast_async(
+                    playlist,
+                    sync_to_moscow=True,
+                    on_track_switch=write_stream_position,
                 )
                 async for chunk in gen:
                     if shutdown:
