@@ -9,6 +9,8 @@ import {
   regenerateNewsText,
   updateNews,
   deleteNews,
+  getNewsOldCount,
+  clearOldNews,
   getTtsVoices,
   getNewsAudioUrl,
 } from "../../api";
@@ -29,6 +31,8 @@ export default function News() {
   const [ttsProgress, setTtsProgress] = useState(null);
   const [playingId, setPlayingId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [oldCount, setOldCount] = useState(0);
+  const [clearingOld, setClearingOld] = useState(false);
   const audioRef = useRef(null);
 
   const PREVIEW_LEN = 100;
@@ -55,6 +59,7 @@ export default function News() {
   const load = () => {
     setLoading(true);
     getNews(selectedDate).then(setItems).finally(() => setLoading(false));
+    getNewsOldCount().then((r) => setOldCount(r.count ?? 0));
   };
 
   const handleAdd = async () => {
@@ -168,6 +173,19 @@ export default function News() {
     load();
   };
 
+  const handleClearOld = async () => {
+    if (!confirm(`Удалить ${oldCount} записей за прошедшие даты?`)) return;
+    setClearingOld(true);
+    try {
+      await clearOldNews();
+      load();
+    } catch (e) {
+      alert(e.message || "Ошибка");
+    } finally {
+      setClearingOld(false);
+    }
+  };
+
   if (loading && !items.length) return <div className="loading">Загрузка...</div>;
 
   const dateLabel = selectedDate
@@ -218,6 +236,14 @@ export default function News() {
           disabled={loading || generating || !!ttsProgress || !items.filter((n) => n.text && !n.audio_path).length}
         >
           Озвучить для всех
+        </button>
+        <button
+          className="clear-old-btn"
+          onClick={handleClearOld}
+          disabled={loading || clearingOld || oldCount === 0}
+          title={oldCount > 0 ? `Удалить ${oldCount} записей за прошедшие даты` : "Нет старых записей"}
+        >
+          Очистить старые {oldCount > 0 ? `(${oldCount})` : ""}
         </button>
       </div>
 

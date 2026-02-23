@@ -13,7 +13,7 @@ if not exist "%ICECAST_DIR%\bin\icecast.exe" (
 
 echo Starting Icecast (port 8001, mount /live)...
 echo Stream URL: http://localhost:8001/live
-mkdir "%~dp0icecast_logs" 2>nul
-cd /d "%ICECAST_DIR%"
-"%ICECAST_DIR%\bin\icecast.exe" -c "%CONFIG%"
+cd /d "%~dp0.."
+mkdir "dev\icecast_logs" 2>nul
+"%ICECAST_DIR%\bin\icecast.exe" -c "%~dp0..\config\icecast.xml"
 pause

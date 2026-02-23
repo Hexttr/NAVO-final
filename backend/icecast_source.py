@@ -132,20 +132,16 @@ def main():
 
             asyncio.create_task(log_ffmpeg_stderr())
 
-            # Плейлист с реальными длительностями — для точного «Сейчас играет». Строится в фоне.
-            playlist_ref = [playlist]
-
-            async def build_real_playlist():
-                try:
-                    db_real = SessionLocal()
-                    pl = get_playlist_with_times(db_real, today, use_real_durations=True)
-                    db_real.close()
-                    playlist_ref[0] = pl
-                    _log("Плейлист с реальными длительностями готов для now-playing")
-                except Exception as e:
-                    _log(f"Ошибка построения плейлиста с реальными длительностями: {e}")
-
-            asyncio.create_task(build_real_playlist())
+            # Плейлист с реальными длительностями — ДО старта стрима, иначе границы треков (DJ→песня) неверны
+            try:
+                db_real = SessionLocal()
+                playlist_real = get_playlist_with_times(db_real, today, use_real_durations=True)
+                db_real.close()
+                playlist_ref = [playlist_real]
+                _log("Плейлист с реальными длительностями готов для now-playing")
+            except Exception as e:
+                _log(f"Ошибка плейлиста с реальными длительностями: {e}, используем БД")
+                playlist_ref = [playlist]
 
             async def stream_chunks():
                 gen = stream_broadcast_ffmpeg_concat(

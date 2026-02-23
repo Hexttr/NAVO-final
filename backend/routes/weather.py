@@ -26,6 +26,30 @@ class WeatherUpdate(BaseModel):
     text: str | None = None
 
 
+@router.get("/old-count")
+def weather_old_count(db: Session = Depends(get_db)):
+    """Количество погоды за прошедшие даты (для кнопки «Очистить старые»)."""
+    from services.streamer_service import moscow_date
+    today = moscow_date()
+    return {"count": db.query(Weather).filter(Weather.broadcast_date < today).count()}
+
+
+@router.delete("/clear-old")
+def clear_old_weather(db: Session = Depends(get_db)):
+    """Удалить всю погоду за прошедшие даты и связанные слоты эфира."""
+    from services.streamer_service import moscow_date
+    today = moscow_date()
+    ids = [r.id for r in db.query(Weather.id).filter(Weather.broadcast_date < today).all()]
+    if ids:
+        db.query(BroadcastItem).filter(
+            BroadcastItem.entity_type == "weather",
+            BroadcastItem.entity_id.in_(ids),
+        ).delete(synchronize_session=False)
+        db.query(Weather).filter(Weather.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": len(ids)}
+
+
 @router.get("")
 def list_weather(
     d: date | None = Query(None, description="Фильтр по дате YYYY-MM-DD"),

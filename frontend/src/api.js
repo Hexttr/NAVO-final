@@ -213,6 +213,16 @@ export async function updateNews(newsId, text) {
   return r.json();
 }
 
+export async function getNewsOldCount() {
+  const r = await fetch(`${API}/news/old-count`);
+  return r.json();
+}
+
+export async function clearOldNews() {
+  const r = await fetch(`${API}/news/clear-old`, { method: "DELETE" });
+  return r.json();
+}
+
 export async function deleteNews(newsId) {
   const r = await fetch(`${API}/news/${newsId}`, { method: "DELETE" });
   return r.json();
@@ -280,6 +290,16 @@ export async function updateWeather(weatherId, text) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
+  return r.json();
+}
+
+export async function getWeatherOldCount() {
+  const r = await fetch(`${API}/weather/old-count`);
+  return r.json();
+}
+
+export async function clearOldWeather() {
+  const r = await fetch(`${API}/weather/clear-old`, { method: "DELETE" });
   return r.json();
 }
 

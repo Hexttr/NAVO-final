@@ -232,6 +232,7 @@ def ensure_broadcast_for_date(db: Session, target_date: date) -> bool:
 def copy_broadcast_to_date(db: Session, from_date: date, to_date: date) -> int:
     """
     Скопировать эфир с from_date на to_date. Перезаписывает to_date.
+    News и Weather дублируются (старые остаются, новые с broadcast_date=to_date).
     Возвращает количество скопированных слотов.
     """
     source_items = (
@@ -244,11 +245,45 @@ def copy_broadcast_to_date(db: Session, from_date: date, to_date: date) -> int:
         raise ValueError(f"Нет эфира на дату {from_date}")
 
     db.query(BroadcastItem).filter(BroadcastItem.broadcast_date == to_date).delete()
+
+    news_old_to_new = {}
+    weather_old_to_new = {}
     for item in source_items:
+        if item.entity_type == "news" and item.entity_id not in news_old_to_new:
+            n = db.get(News, item.entity_id)
+            if n:
+                copy_n = News(
+                    text=n.text,
+                    audio_path=n.audio_path or "",
+                    duration_seconds=n.duration_seconds or 0,
+                    broadcast_date=to_date,
+                )
+                db.add(copy_n)
+                db.flush()
+                news_old_to_new[item.entity_id] = copy_n.id
+        elif item.entity_type == "weather" and item.entity_id not in weather_old_to_new:
+            w = db.get(Weather, item.entity_id)
+            if w:
+                copy_w = Weather(
+                    text=w.text,
+                    audio_path=w.audio_path or "",
+                    duration_seconds=w.duration_seconds or 0,
+                    broadcast_date=to_date,
+                )
+                db.add(copy_w)
+                db.flush()
+                weather_old_to_new[item.entity_id] = copy_w.id
+
+    for item in source_items:
+        entity_id = item.entity_id
+        if item.entity_type == "news" and entity_id in news_old_to_new:
+            entity_id = news_old_to_new[entity_id]
+        elif item.entity_type == "weather" and entity_id in weather_old_to_new:
+            entity_id = weather_old_to_new[entity_id]
         db.add(BroadcastItem(
             broadcast_date=to_date,
             entity_type=item.entity_type,
-            entity_id=item.entity_id,
+            entity_id=entity_id,
             start_time=item.start_time,
             end_time=item.end_time,
             duration_seconds=item.duration_seconds,
@@ -561,6 +596,15 @@ async def stream_broadcast_ffmpeg_concat(
         # Реэнкод в единый формат — разные битрейты/сэмплрейты при concat вызывают
         # обрыв потока у Icecast и «обрезку» MP3 при переключении треков
         bitrate = getattr(settings, "stream_bitrate", "256k") or "256k"
+        # 256k -> 32000 bytes/sec для расчёта позиции по фактическим байтам (не wall clock)
+        bitrate_bps = 256000
+        if isinstance(bitrate, str) and bitrate.endswith("k"):
+            try:
+                bitrate_bps = int(bitrate[:-1]) * 1000
+            except ValueError:
+                pass
+        bytes_per_sec = max(1, bitrate_bps // 8)
+
         args = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-stream_loop", "-1",
@@ -574,7 +618,7 @@ async def stream_broadcast_ffmpeg_concat(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stream_start = time.time()
+        bytes_yielded = 0
         last_position_write = 0.0
         try:
             while True:
@@ -582,8 +626,10 @@ async def stream_broadcast_ffmpeg_concat(
                 if not chunk:
                     break
                 yield chunk
+                bytes_yielded += len(chunk)
                 if on_position and (time.time() - last_position_write) >= 1.0:
-                    elapsed = time.time() - stream_start
+                    # Позиция по фактическим байтам, не wall clock — меньше рассинхрона
+                    elapsed_sec = bytes_yielded / bytes_per_sec
                     lookup_pl = playlist_for_track_lookup[0] if playlist_for_track_lookup and len(playlist_for_track_lookup) > 0 else playlist
                     # Реальный плейлист: cumulative (сумма длительностей), без больших скачков.
                     # Расписание: фиксированные слоты (9:00, 10:00) — скачки > 600 сек.
@@ -593,12 +639,12 @@ async def stream_broadcast_ffmpeg_concat(
                             gaps = [lookup_pl[i + 1][1] - lookup_pl[i][1] for i in range(min(20, len(lookup_pl) - 1))]
                             use_cumulative = not gaps or max(gaps) < 600
                     if use_cumulative:
-                        lookup_pos = lookup_pl[start_idx][1] + total_seek + elapsed
+                        lookup_pos = lookup_pl[start_idx][1] + total_seek + elapsed_sec
                         total_dur = lookup_pl[-1][1] + lookup_pl[-1][2] if lookup_pl else None
                         track = _find_track_at_position(lookup_pl, lookup_pos, total_dur)
                     else:
-                        track = _find_track_at_position(lookup_pl, stream_start_position_sec + elapsed)
-                    pos_for_api = stream_start_position_sec + elapsed
+                        track = _find_track_at_position(lookup_pl, stream_start_position_sec + elapsed_sec)
+                    pos_for_api = stream_start_position_sec + elapsed_sec
                     try:
                         if track:
                             on_position(pos_for_api, track[0], track[1], track[2])

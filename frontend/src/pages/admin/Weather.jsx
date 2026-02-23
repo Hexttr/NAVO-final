@@ -9,6 +9,8 @@ import {
   regenerateWeatherText,
   updateWeather,
   deleteWeather,
+  getWeatherOldCount,
+  clearOldWeather,
   getTtsVoices,
   getWeatherAudioUrl,
 } from "../../api";
@@ -29,6 +31,8 @@ export default function Weather() {
   const [ttsProgress, setTtsProgress] = useState(null);
   const [playingId, setPlayingId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [oldCount, setOldCount] = useState(0);
+  const [clearingOld, setClearingOld] = useState(false);
   const audioRef = useRef(null);
 
   const PREVIEW_LEN = 100;
@@ -55,6 +59,7 @@ export default function Weather() {
   const load = () => {
     setLoading(true);
     getWeather(selectedDate).then(setItems).finally(() => setLoading(false));
+    getWeatherOldCount().then((r) => setOldCount(r.count ?? 0));
   };
 
   const handleAdd = async () => {
@@ -165,6 +170,19 @@ export default function Weather() {
     load();
   };
 
+  const handleClearOld = async () => {
+    if (!confirm(`Удалить ${oldCount} записей за прошедшие даты?`)) return;
+    setClearingOld(true);
+    try {
+      await clearOldWeather();
+      load();
+    } catch (e) {
+      alert(e.message || "Ошибка");
+    } finally {
+      setClearingOld(false);
+    }
+  };
+
   if (loading && !items.length) return <div className="loading">Загрузка...</div>;
 
   const dateLabel = selectedDate
@@ -215,6 +233,14 @@ export default function Weather() {
           disabled={loading || generating || !!ttsProgress || !items.filter((w) => w.text && !w.audio_path).length}
         >
           Озвучить для всех
+        </button>
+        <button
+          className="clear-old-btn"
+          onClick={handleClearOld}
+          disabled={loading || clearingOld || oldCount === 0}
+          title={oldCount > 0 ? `Удалить ${oldCount} записей за прошедшие даты` : "Нет старых записей"}
+        >
+          Очистить старые {oldCount > 0 ? `(${oldCount})` : ""}
         </button>
       </div>
 

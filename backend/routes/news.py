@@ -35,6 +35,30 @@ async def rss_test(db: Session = Depends(get_db)):
     return {"count": len(items), "items": [{"title": x["title"], "summary": (x["summary"] or "")[:100]} for x in items]}
 
 
+@router.get("/old-count")
+def news_old_count(db: Session = Depends(get_db)):
+    """Количество новостей за прошедшие даты (для кнопки «Очистить старые»)."""
+    from services.streamer_service import moscow_date
+    today = moscow_date()
+    return {"count": db.query(News).filter(News.broadcast_date < today).count()}
+
+
+@router.delete("/clear-old")
+def clear_old_news(db: Session = Depends(get_db)):
+    """Удалить все новости за прошедшие даты и связанные слоты эфира."""
+    from services.streamer_service import moscow_date
+    today = moscow_date()
+    ids = [r.id for r in db.query(News.id).filter(News.broadcast_date < today).all()]
+    if ids:
+        db.query(BroadcastItem).filter(
+            BroadcastItem.entity_type == "news",
+            BroadcastItem.entity_id.in_(ids),
+        ).delete(synchronize_session=False)
+        db.query(News).filter(News.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": len(ids)}
+
+
 @router.get("")
 def list_news(
     d: date | None = Query(None, description="Фильтр по дате YYYY-MM-DD"),
