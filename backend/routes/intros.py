@@ -7,6 +7,7 @@ from database import get_db
 from models import Intro
 from config import settings
 from services.streamer_service import get_entity_duration_from_file
+from utils.upload_utils import read_with_limit
 
 router = APIRouter(prefix="/intros", tags=["intros"])
 
@@ -37,8 +38,10 @@ async def create_intro(title: str = Form(...), file: UploadFile = UploadFile(...
     ext = Path(file.filename or "").suffix or ".mp3"
     if ext.lower() != ".mp3":
         ext = ".mp3"
+    max_bytes = getattr(settings, "upload_max_bytes", 0) or 52428800  # 50 MB
+    content = await read_with_limit(file, max_bytes)
     path = UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}"
-    path.write_bytes(await file.read())
+    path.write_bytes(content)
     i = Intro(title=title, file_path=str(path), duration_seconds=0)
     db.add(i)
     db.commit()

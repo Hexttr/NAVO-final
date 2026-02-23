@@ -9,6 +9,7 @@ from database import get_db
 from models import Weather, BroadcastItem
 from config import settings
 from pathlib import Path
+from utils.upload_utils import read_with_limit
 from services.weather_service import fetch_weather_forecast
 from services.settings_service import get, WEATHER_REGIONS
 from services.llm_service import generate_weather_text
@@ -180,10 +181,12 @@ async def upload_weather_tts(weather_id: int, file: UploadFile, db: Session = De
     w = db.get(Weather,weather_id)
     if not w:
         raise HTTPException(404, "Weather not found")
+    max_bytes = getattr(settings, "upload_max_bytes", 0) or 52428800
+    content = await read_with_limit(file, max_bytes)
     audio_dir = Path(settings.upload_dir) / "weather"
     audio_dir.mkdir(parents=True, exist_ok=True)
     path = audio_dir / f"weather_{weather_id}_{uuid.uuid4().hex}.mp3"
-    path.write_bytes(await file.read())
+    path.write_bytes(content)
     w.audio_path = str(path)
     db.commit()
     return {"audio_path": w.audio_path}

@@ -8,6 +8,7 @@ from database import get_db
 from models import News, BroadcastItem
 from config import settings
 from pathlib import Path
+from utils.upload_utils import read_with_limit
 from services.news_service import fetch_news_from_rss
 from services.llm_service import generate_news_text
 from services.settings_service import get, NEWS_REGIONS
@@ -192,10 +193,12 @@ async def upload_news_tts(news_id: int, file: UploadFile, db: Session = Depends(
     n = db.get(News,news_id)
     if not n:
         raise HTTPException(404, "News not found")
+    max_bytes = getattr(settings, "upload_max_bytes", 0) or 52428800
+    content = await read_with_limit(file, max_bytes)
     audio_dir = Path(settings.upload_dir) / "news"
     audio_dir.mkdir(parents=True, exist_ok=True)
     path = audio_dir / f"news_{news_id}_{uuid.uuid4().hex}.mp3"
-    path.write_bytes(await file.read())
+    path.write_bytes(content)
     n.audio_path = str(path)
     db.commit()
     return {"audio_path": n.audio_path}

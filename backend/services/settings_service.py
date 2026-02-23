@@ -39,6 +39,7 @@ DEFAULTS = {
     "news_region": "tajikistan",
     "elevenlabs_api_key_frontend": "",
     "openai_api_key": "",
+    "groq_api_key": "",
 }
 
 WEATHER_REGIONS = {

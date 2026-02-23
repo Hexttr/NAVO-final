@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Player from "./pages/Player";
+import AdminAuthGate from "./pages/admin/AdminAuthGate";
 import AdminLayout from "./pages/admin/AdminLayout";
 import SongsDj from "./pages/admin/SongsDj";
 import News from "./pages/admin/News";
@@ -16,7 +17,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Player />} />
-        <Route path="/admin" element={<AdminLayout />}>
+        <Route path="/admin" element={<AdminAuthGate><AdminLayout /></AdminAuthGate>}>
           <Route index element={<Broadcast />} />
           <Route path="songs" element={<SongsDj />} />
           <Route path="news" element={<News />} />

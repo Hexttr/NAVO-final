@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     sync_offset_seconds: int = 0
     # Задержка «Сейчас в эфире» (сек): компенсация буферов FFmpeg/Icecast/плеера. 0 = без задержки.
     now_playing_delay_seconds: int = 5
+    # CORS: список origins через запятую. Пусто = дефолтные localhost + navoradio.com
+    cors_origins: str = ""
+    # Макс. размер загружаемого файла (байт). 0 = без лимита.
+    upload_max_bytes: int = 52428800  # 50 MB
+    # API-ключ админки. Пусто = без авторизации (dev).
+    admin_api_key: str = ""
 
     class Config:
         env_file = str(_env_path)

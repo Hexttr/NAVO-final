@@ -1,5 +1,39 @@
 const API =
   import.meta.env.DEV ? "http://localhost:8000/api" : "/api";
+const BASE = import.meta.env.DEV ? "http://localhost:8000" : "";
+
+/** Заголовки авторизации для админки (X-Admin-Key) */
+function authHeaders() {
+  const k = sessionStorage.getItem("admin_api_key");
+  return k ? { "X-Admin-Key": k } : {};
+}
+
+/** Обёртка fetch с auth для админ-API */
+async function apiFetch(url, opts = {}) {
+  const r = await fetch(url, { ...opts, headers: { ...opts.headers, ...authHeaders() } });
+  if (r.status === 401) {
+    sessionStorage.removeItem("admin_api_key");
+    window.dispatchEvent(new CustomEvent("admin-unauth"));
+  }
+  return r;
+}
+
+export async function checkAuth(key = "") {
+  const r = await fetch(`${BASE || ""}/api/auth/check`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: key.trim() }),
+  });
+  const data = await r.json();
+  if (r.ok && data.ok && key.trim()) {
+    sessionStorage.setItem("admin_api_key", key.trim());
+  }
+  return data;
+}
+
+export function hasStoredAdminKey() {
+  return !!sessionStorage.getItem("admin_api_key");
+}
 
 /** Текущая дата по Москве (UTC+3) в формате YYYY-MM-DD */
 export function moscowDateStr() {
@@ -7,21 +41,19 @@ export function moscowDateStr() {
 }
 
 export async function getStats() {
-  const r = await fetch(`${API}/admin/stats`);
+  const r = await apiFetch(`${API}/admin/stats`);
   return r.json();
 }
 
 export async function getDiagnostics() {
-  const base = API.replace("/api", "") || "";
-  const r = await fetch(`${base}/api/diagnostics`, { cache: "no-store" });
+  const r = await apiFetch(`${BASE || ""}/api/diagnostics`, { cache: "no-store" });
   return r.json();
 }
 
 /** Диагностика «Сейчас играет» — для отладки рассинхрона */
 export async function getDiagnosticsNowPlaying(date = null) {
-  const base = API.replace("/api", "") || "";
   const d = date || moscowDateStr();
-  const r = await fetch(`${base}/api/broadcast/diagnostics/now-playing?d=${d}`, { cache: "no-store" });
+  const r = await apiFetch(`${BASE || ""}/api/broadcast/diagnostics/now-playing?d=${d}`, { cache: "no-store" });
   const data = await r.json();
   if (!r.ok) {
     throw new Error(data.detail || data.error || `HTTP ${r.status}`);
@@ -30,12 +62,12 @@ export async function getDiagnosticsNowPlaying(date = null) {
 }
 
 export async function getSongs() {
-  const r = await fetch(`${API}/songs`);
+  const r = await apiFetch(`${API}/songs`);
   return r.json();
 }
 
 export async function getSong(songId) {
-  const r = await fetch(`${API}/songs/${songId}`);
+  const r = await apiFetch(`${API}/songs/${songId}`);
   if (!r.ok) throw new Error("Песня не найдена");
   return r.json();
 }
@@ -55,7 +87,7 @@ export function getIntroAudioUrl(introId) {
 }
 
 export async function createSong(data) {
-  const r = await fetch(`${API}/songs`, {
+  const r = await apiFetch(`${API}/songs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -68,12 +100,12 @@ export async function createSong(data) {
 export async function uploadSongFile(songId, file) {
   const fd = new FormData();
   fd.append("file", file);
-  const r = await fetch(`${API}/songs/upload/${songId}`, { method: "POST", body: fd });
+  const r = await apiFetch(`${API}/songs/upload/${songId}`, { method: "POST", body: fd });
   return r.json();
 }
 
 export async function generateFromJamendo() {
-  const r = await fetch(`${API}/songs/jamendo/generate`, { method: "POST" });
+  const r = await apiFetch(`${API}/songs/jamendo/generate`, { method: "POST" });
   const data = await r.json();
   if (!r.ok) throw new Error(data.detail || "Ошибка Jamendo");
   return data;
@@ -95,14 +127,14 @@ export function generateFromJamendoStream(onProgress) {
 }
 
 export async function generateDj(songId) {
-  const r = await fetch(`${API}/songs/${songId}/generate-dj`, { method: "POST" });
+  const r = await apiFetch(`${API}/songs/${songId}/generate-dj`, { method: "POST" });
   const data = await r.json();
   if (!r.ok) throw new Error(data.detail || "Ошибка");
   return data;
 }
 
 export async function generateDjBatch(songIds) {
-  const r = await fetch(`${API}/songs/generate-dj-batch?${songIds.map((id) => `song_ids=${id}`).join("&")}`, {
+  const r = await apiFetch(`${API}/songs/generate-dj-batch?${songIds.map((id) => `song_ids=${id}`).join("&")}`, {
     method: "POST",
   });
   return r.json();
@@ -111,13 +143,13 @@ export async function generateDjBatch(songIds) {
 export async function generateDjTts(songId, voice = "ru-RU-DmitryNeural") {
   const settings = await getSettings();
   if (settings.tts_provider === "elevenlabs") {
-    const r = await fetch(`${API}/songs/${songId}`);
+    const r = await apiFetch(`${API}/songs/${songId}`);
     const item = await r.json();
     const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
     const blob = await localElevenLabsTTS(item.dj_text, voice);
     return uploadTTSAudio("songs", songId, blob);
   }
-  const r = await fetch(`${API}/songs/${songId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
+  const r = await apiFetch(`${API}/songs/${songId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err.detail || "Ошибка TTS");
@@ -126,7 +158,7 @@ export async function generateDjTts(songId, voice = "ru-RU-DmitryNeural") {
 }
 
 export async function updateSong(songId, data) {
-  const r = await fetch(`${API}/songs/${songId}`, {
+  const r = await apiFetch(`${API}/songs/${songId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -135,18 +167,18 @@ export async function updateSong(songId, data) {
 }
 
 export async function deleteSong(songId) {
-  const r = await fetch(`${API}/songs/${songId}`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/songs/${songId}`, { method: "DELETE" });
   return r.json();
 }
 
 export async function getNews(date) {
   const url = date ? `${API}/news?d=${date}` : `${API}/news`;
-  const r = await fetch(url);
+  const r = await apiFetch(url);
   return r.json();
 }
 
 export async function createNews(text, broadcastDate) {
-  const r = await fetch(`${API}/news`, {
+  const r = await apiFetch(`${API}/news`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, broadcast_date: broadcastDate || null }),
@@ -156,7 +188,7 @@ export async function createNews(text, broadcastDate) {
 
 export async function generateNews(broadcastDate) {
   const url = broadcastDate ? `${API}/news/generate?d=${broadcastDate}` : `${API}/news/generate`;
-  const r = await fetch(url, { method: "POST" });
+  const r = await apiFetch(url, { method: "POST" });
   const text = await r.text();
   if (!r.ok) {
     try {
@@ -177,7 +209,7 @@ export async function regenerateNewsText(newsId, broadcastDate, broadcastItemId)
   if (broadcastDate) params.push(`d=${broadcastDate}`);
   if (broadcastItemId != null) params.push(`broadcast_item_id=${broadcastItemId}`);
   if (params.length) url += "?" + params.join("&");
-  const r = await fetch(url, { method: "POST" });
+  const r = await apiFetch(url, { method: "POST" });
   const data = await r.json();
   if (!r.ok) throw new Error(data.detail || "Ошибка");
   return data;
@@ -186,13 +218,13 @@ export async function regenerateNewsText(newsId, broadcastDate, broadcastItemId)
 export async function generateNewsTts(newsId, voice = "ru-RU-DmitryNeural") {
   const settings = await getSettings();
   if (settings.tts_provider === "elevenlabs") {
-    const r = await fetch(`${API}/news/${newsId}`);
+    const r = await apiFetch(`${API}/news/${newsId}`);
     const item = await r.json();
     const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
     const blob = await localElevenLabsTTS(item.text, voice);
     return uploadTTSAudio("news", newsId, blob);
   }
-  const r = await fetch(`${API}/news/${newsId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
+  const r = await apiFetch(`${API}/news/${newsId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err.detail || "Ошибка TTS");
@@ -205,7 +237,7 @@ export function getNewsAudioUrl(newsId) {
 }
 
 export async function updateNews(newsId, text) {
-  const r = await fetch(`${API}/news/${newsId}`, {
+  const r = await apiFetch(`${API}/news/${newsId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
@@ -214,28 +246,28 @@ export async function updateNews(newsId, text) {
 }
 
 export async function getNewsOldCount() {
-  const r = await fetch(`${API}/news/old-count`);
+  const r = await apiFetch(`${API}/news/old-count`);
   return r.json();
 }
 
 export async function clearOldNews() {
-  const r = await fetch(`${API}/news/clear-old`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/news/clear-old`, { method: "DELETE" });
   return r.json();
 }
 
 export async function deleteNews(newsId) {
-  const r = await fetch(`${API}/news/${newsId}`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/news/${newsId}`, { method: "DELETE" });
   return r.json();
 }
 
 export async function getWeather(date) {
   const url = date ? `${API}/weather?d=${date}` : `${API}/weather`;
-  const r = await fetch(url);
+  const r = await apiFetch(url);
   return r.json();
 }
 
 export async function createWeather(text, broadcastDate) {
-  const r = await fetch(`${API}/weather`, {
+  const r = await apiFetch(`${API}/weather`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, broadcast_date: broadcastDate || null }),
@@ -245,7 +277,7 @@ export async function createWeather(text, broadcastDate) {
 
 export async function generateWeather(broadcastDate) {
   const url = broadcastDate ? `${API}/weather/generate?d=${broadcastDate}` : `${API}/weather/generate`;
-  const r = await fetch(url, { method: "POST" });
+  const r = await apiFetch(url, { method: "POST" });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.detail || data.message || `Ошибка ${r.status}`);
   return data;
@@ -257,7 +289,7 @@ export async function regenerateWeatherText(weatherId, broadcastDate, broadcastI
   if (broadcastDate) params.push(`d=${broadcastDate}`);
   if (broadcastItemId != null) params.push(`broadcast_item_id=${broadcastItemId}`);
   if (params.length) url += "?" + params.join("&");
-  const r = await fetch(url, { method: "POST" });
+  const r = await apiFetch(url, { method: "POST" });
   const data = await r.json();
   if (!r.ok) throw new Error(data.detail || "Ошибка");
   return data;
@@ -266,13 +298,13 @@ export async function regenerateWeatherText(weatherId, broadcastDate, broadcastI
 export async function generateWeatherTts(weatherId, voice = "ru-RU-DmitryNeural") {
   const settings = await getSettings();
   if (settings.tts_provider === "elevenlabs") {
-    const r = await fetch(`${API}/weather/${weatherId}`);
+    const r = await apiFetch(`${API}/weather/${weatherId}`);
     const item = await r.json();
     const { localElevenLabsTTS, uploadTTSAudio } = await import("./elevenlabs.js");
     const blob = await localElevenLabsTTS(item.text, voice);
     return uploadTTSAudio("weather", weatherId, blob);
   }
-  const r = await fetch(`${API}/weather/${weatherId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
+  const r = await apiFetch(`${API}/weather/${weatherId}/tts?voice=${encodeURIComponent(voice)}`, { method: "POST" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err.detail || "Ошибка TTS");
@@ -285,7 +317,7 @@ export function getWeatherAudioUrl(weatherId) {
 }
 
 export async function updateWeather(weatherId, text) {
-  const r = await fetch(`${API}/weather/${weatherId}`, {
+  const r = await apiFetch(`${API}/weather/${weatherId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
@@ -294,22 +326,22 @@ export async function updateWeather(weatherId, text) {
 }
 
 export async function getWeatherOldCount() {
-  const r = await fetch(`${API}/weather/old-count`);
+  const r = await apiFetch(`${API}/weather/old-count`);
   return r.json();
 }
 
 export async function clearOldWeather() {
-  const r = await fetch(`${API}/weather/clear-old`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/weather/clear-old`, { method: "DELETE" });
   return r.json();
 }
 
 export async function deleteWeather(weatherId) {
-  const r = await fetch(`${API}/weather/${weatherId}`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/weather/${weatherId}`, { method: "DELETE" });
   return r.json();
 }
 
 export async function getPodcasts() {
-  const r = await fetch(`${API}/podcasts`);
+  const r = await apiFetch(`${API}/podcasts`);
   return r.json();
 }
 
@@ -317,17 +349,17 @@ export async function createPodcast(title, file) {
   const fd = new FormData();
   fd.append("title", title);
   fd.append("file", file);
-  const r = await fetch(`${API}/podcasts`, { method: "POST", body: fd });
+  const r = await apiFetch(`${API}/podcasts`, { method: "POST", body: fd });
   return r.json();
 }
 
 export async function deletePodcast(podcastId) {
-  const r = await fetch(`${API}/podcasts/${podcastId}`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/podcasts/${podcastId}`, { method: "DELETE" });
   return r.json();
 }
 
 export async function getIntros() {
-  const r = await fetch(`${API}/intros`);
+  const r = await apiFetch(`${API}/intros`);
   return r.json();
 }
 
@@ -335,29 +367,29 @@ export async function createIntro(title, file) {
   const fd = new FormData();
   fd.append("title", title);
   fd.append("file", file);
-  const r = await fetch(`${API}/intros`, { method: "POST", body: fd });
+  const r = await apiFetch(`${API}/intros`, { method: "POST", body: fd });
   return r.json();
 }
 
 export async function deleteIntro(introId) {
-  const r = await fetch(`${API}/intros/${introId}`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/intros/${introId}`, { method: "DELETE" });
   return r.json();
 }
 
 export async function getBroadcast(date) {
-  const r = await fetch(`${API}/broadcast?d=${date}`);
+  const r = await apiFetch(`${API}/broadcast?d=${date}`);
   return r.json();
 }
 
 export async function deleteBroadcast(date) {
-  const r = await fetch(`${API}/broadcast?d=${date}`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/broadcast?d=${date}`, { method: "DELETE" });
   const data = await r.json();
   if (!r.ok) throw new Error(data.detail || "Ошибка");
   return data;
 }
 
 export async function getBroadcastPlaylistUrls(date, sync = true) {
-  const r = await fetch(`${API}/broadcast/playlist-urls?d=${date}&sync=${sync}`);
+  const r = await apiFetch(`${API}/broadcast/playlist-urls?d=${date}&sync=${sync}`);
   if (!r.ok) throw new Error("Нет эфира на эту дату");
   return r.json();
 }
@@ -365,7 +397,7 @@ export async function getBroadcastPlaylistUrls(date, sync = true) {
 /** URL для плеера: Icecast (приоритет) и /stream (fallback). */
 export async function getStreamUrl() {
   const base = API.replace("/api", "") || "";
-  const r = await fetch(`${base}/api/broadcast/stream-url`, { cache: "no-store" });
+  const r = await apiFetch(`${base}/api/broadcast/stream-url`, { cache: "no-store" });
   const data = await r.json();
   return {
     icecastUrl: data?.icecastUrl || "http://localhost:8001/live",
@@ -378,7 +410,7 @@ export async function getBroadcastNowPlaying(date, positionSec = null) {
   if (positionSec != null && positionSec >= 0) {
     url += `&position=${Math.floor(positionSec)}`;
   }
-  const r = await fetch(url, {
+  const r = await apiFetch(url, {
     cache: "no-store",
     headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
   });
@@ -386,7 +418,7 @@ export async function getBroadcastNowPlaying(date, positionSec = null) {
 }
 
 export async function generateBroadcast(date) {
-  const r = await fetch(`${API}/broadcast/generate?d=${date}`, { method: "POST" });
+  const r = await apiFetch(`${API}/broadcast/generate?d=${date}`, { method: "POST" });
   const text = await r.text();
   try {
     const data = JSON.parse(text);
@@ -405,14 +437,14 @@ export async function copyBroadcastToDate(fromDate, toDate) {
     d.setUTCDate(d.getUTCDate() + 1);
     toDate = d.toISOString().slice(0, 10);
   }
-  const r = await fetch(`${API}/broadcast/copy?from=${fromDate}&to=${toDate}`, { method: "POST" });
+  const r = await apiFetch(`${API}/broadcast/copy?from=${fromDate}&to=${toDate}`, { method: "POST" });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.detail || data.message || `Ошибка ${r.status}`);
   return data;
 }
 
 export async function deleteBroadcastItem(itemId, date) {
-  const r = await fetch(`${API}/broadcast/items/${itemId}?d=${date}`, { method: "DELETE" });
+  const r = await apiFetch(`${API}/broadcast/items/${itemId}?d=${date}`, { method: "DELETE" });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     throw new Error(err.detail || "Ошибка удаления");
@@ -421,7 +453,7 @@ export async function deleteBroadcastItem(itemId, date) {
 }
 
 export async function insertBroadcastItem(itemId, date, entityType, entityId) {
-  const r = await fetch(`${API}/broadcast/items/${itemId}/insert?d=${date}`, {
+  const r = await apiFetch(`${API}/broadcast/items/${itemId}/insert?d=${date}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ entity_type: entityType, entity_id: entityId }),
@@ -434,7 +466,7 @@ export async function insertBroadcastItem(itemId, date, entityType, entityId) {
 }
 
 export async function moveBroadcastItem(date, fromIndex, toIndex) {
-  const r = await fetch(
+  const r = await apiFetch(
     `${API}/broadcast/move?d=${date}&from_index=${fromIndex}&to_index=${toIndex}`,
     { method: "POST" }
   );
@@ -443,7 +475,7 @@ export async function moveBroadcastItem(date, fromIndex, toIndex) {
 }
 
 export async function swapBroadcastItems(date, fromIndex, toIndex) {
-  const r = await fetch(
+  const r = await apiFetch(
     `${API}/broadcast/swap?d=${date}&from_index=${fromIndex}&to_index=${toIndex}`,
     { method: "POST" }
   );
@@ -453,17 +485,17 @@ export async function swapBroadcastItems(date, fromIndex, toIndex) {
 
 export async function getTtsVoices() {
   // Always use backend proxy — for ElevenLabs it avoids CORS; for Edge TTS it returns Edge voices.
-  const r = await fetch(`${API}/tts/voices`);
+  const r = await apiFetch(`${API}/tts/voices`);
   return r.json();
 }
 
 export async function getSettings() {
-  const r = await fetch(`${API}/settings`);
+  const r = await apiFetch(`${API}/settings`);
   return r.json();
 }
 
 export async function saveSettings(data) {
-  const r = await fetch(`${API}/settings`, {
+  const r = await apiFetch(`${API}/settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

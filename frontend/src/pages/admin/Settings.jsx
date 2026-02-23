@@ -187,7 +187,7 @@ export default function Settings() {
         <section className="settings-section">
           <h3>Модель для генерации текстов</h3>
           <p className="settings-hint">
-            Groq (бесплатно) или ChatGPT (OpenAI, платно). Ключ ChatGPT вводится ниже при выборе.
+            Groq (бесплатно) или ChatGPT (OpenAI, платно). Ключ вводится ниже при выборе провайдера.
           </p>
           <div className="settings-select-row">
             <select
@@ -199,6 +199,21 @@ export default function Settings() {
               <option value="openai">ChatGPT (OpenAI)</option>
             </select>
           </div>
+          {data.llm_provider === "groq" && (
+            <div style={{ marginTop: "10px" }}>
+              <label>API ключ Groq:</label>
+              <input
+                type="password"
+                value={data.groq_api_key || ""}
+                onChange={(e) => setData((d) => ({ ...d, groq_api_key: e.target.value }))}
+                className="settings-textarea"
+                placeholder="gsk_..."
+              />
+              <p className="settings-hint" style={{ marginTop: "5px" }}>
+                Ключ сохраняется в настройках. Без ключа генерация DJ/новостей/погоды не сработает. Получить на console.groq.com.
+              </p>
+            </div>
+          )}
           {data.llm_provider === "openai" && (
             <div style={{ marginTop: "10px" }}>
               <label>API ключ OpenAI (ChatGPT):</label>

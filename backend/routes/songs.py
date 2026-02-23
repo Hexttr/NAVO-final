@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import Song, News, Weather
 from config import settings
+from utils.upload_utils import read_with_limit
 from services.jamendo import JamendoService, search_tracks, download_track
 from services.llm_service import generate_dj_text
 from services.tts_service import text_to_speech
@@ -81,8 +82,10 @@ async def upload_song_file(song_id: int, file: UploadFile, db: Session = Depends
     ext = Path(file.filename or "").suffix or ".mp3"
     if ext.lower() != ".mp3":
         ext = ".mp3"
+    max_bytes = getattr(settings, "upload_max_bytes", 0) or 52428800
+    content = await read_with_limit(file, max_bytes)
     path = UPLOAD_DIR / f"{song_id}_{uuid.uuid4().hex}{ext}"
-    path.write_bytes(await file.read())
+    path.write_bytes(content)
     song.file_path = str(path)
     db.commit()
     return {"file_path": song.file_path}
@@ -92,10 +95,12 @@ async def upload_song_tts(song_id: int, file: UploadFile, db: Session = Depends(
     song = db.get(Song,song_id)
     if not song:
         raise HTTPException(404, "Song not found")
+    max_bytes = getattr(settings, "upload_max_bytes", 0) or 52428800
+    content = await read_with_limit(file, max_bytes)
     audio_dir = Path(settings.upload_dir) / "dj"
     audio_dir.mkdir(parents=True, exist_ok=True)
     path = audio_dir / f"dj_{song_id}_{uuid.uuid4().hex}.mp3"
-    path.write_bytes(await file.read())
+    path.write_bytes(content)
     song.dj_audio_path = str(path)
     db.commit()
     return {"audio_path": song.dj_audio_path}

@@ -2,6 +2,7 @@
 LLM service: routes to Groq or OpenAI based on settings.
 Uses prompts from settings (editable in admin).
 """
+import os
 from sqlalchemy.orm import Session
 from services.settings_service import get
 from services.groq_service import _call_groq
@@ -48,7 +49,8 @@ async def _call_llm(db: Session, system_prompt: str, user_content: str) -> str:
     provider = get(db, "llm_provider") or "groq"
     if provider == "openai":
         return await _call_openai(db, system_prompt, user_content)
-    return await _call_groq(system_prompt, user_content)
+    api_key = get(db, "groq_api_key") or getattr(config_settings, "groq_api_key", None) or os.environ.get("GROQ_API_KEY", "") or ""
+    return await _call_groq(system_prompt, user_content, api_key=api_key)
 
 
 async def _call_openai(db: Session, system_prompt: str, user_content: str) -> str:

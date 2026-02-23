@@ -50,6 +50,16 @@ function DiagnosticsNowPlaying() {
   );
 }
 
+function formatUptime(sec) {
+  if (sec == null || sec < 0) return "—";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return `${h}ч ${m}м ${s}с`;
+  if (m > 0) return `${m}м ${s}с`;
+  return `${s}с`;
+}
+
 function StatusBadge({ ok, label }) {
   return (
     <span className={`diag-badge ${ok ? "ok" : "fail"}`}>
@@ -128,6 +138,19 @@ export default function Diagnostics() {
               <div className="diagnostics-meta">
                 Дата эфира: {data.moscow_date || "—"} | {data.ts ? new Date(data.ts).toLocaleTimeString("ru") : ""}
               </div>
+            </div>
+            <div className="diagnostics-card">
+              <div className="diagnostics-card-title">Мониторинг</div>
+              <ul className="diagnostics-list">
+                {data.monitoring?.uptime_sec != null && (
+                  <li><strong>Uptime:</strong> {formatUptime(data.monitoring.uptime_sec)}</li>
+                )}
+                {data.monitoring?.health_ok != null && (
+                  <li>
+                    <StatusBadge ok={data.monitoring.health_ok} label={data.monitoring.health_ok ? "Health OK" : "Health degraded"} />
+                  </li>
+                )}
+              </ul>
             </div>
             <div className="diagnostics-card">
               <div className="diagnostics-card-title">Stream / Icecast</div>

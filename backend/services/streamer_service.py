@@ -4,6 +4,7 @@ Stream broadcast playlist as continuous MP3.
 """
 import asyncio
 import json
+import logging
 import subprocess
 import tempfile
 import time
@@ -14,6 +15,8 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from config import settings
+
+logger = logging.getLogger("streamer")
 
 
 def _generate_silence_mp3(duration_sec: float):
@@ -704,8 +707,7 @@ async def stream_broadcast_ffmpeg_concat(
         finally:
             err = await proc.stderr.read()
             if err:
-                import sys
-                print(f"[stream] FFmpeg: {err.decode(errors='replace')[:500]}", file=sys.stderr)
+                logger.warning("FFmpeg: %s", err.decode(errors="replace")[:500])
             await proc.wait()
     finally:
         try:

@@ -39,14 +39,17 @@ async def generate_weather_text(weather_data: str) -> str:
     return await _call_groq(prompt, weather_data)
 
 
-async def _call_groq(system_prompt: str, user_content: str) -> str:
+async def _call_groq(system_prompt: str, user_content: str, api_key: str | None = None) -> str:
+    key = (api_key or "").strip() or settings.groq_api_key
+    if not key:
+        raise RuntimeError("API ключ Groq не задан. Добавьте ключ в настройках (console.groq.com).")
     last_err = None
     for attempt in range(4):
         async with httpx.AsyncClient() as client:
             r = await client.post(
                 GROQ_API,
                 headers={
-                    "Authorization": f"Bearer {settings.groq_api_key}",
+                    "Authorization": f"Bearer {key}",
                     "Content-Type": "application/json",
                 },
                 json={

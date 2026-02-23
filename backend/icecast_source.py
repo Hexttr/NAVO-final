@@ -6,9 +6,10 @@ NAVO RADIO — Source для Icecast.
 Пишет позицию в stream_position.json для синхронизации «Сейчас играет».
 """
 import asyncio
+import logging
 import os
-import sys
 import signal
+import sys
 import time
 
 # Запуск из backend/
@@ -34,10 +35,12 @@ ICECAST_MOUNT = os.environ.get("ICECAST_MOUNT", "live")
 ICECAST_SOURCE_PASSWORD = os.environ.get("ICECAST_SOURCE_PASSWORD", "navo-icecast-source-2024")
 
 shutdown = False
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+logger = logging.getLogger("icecast_source")
 
 
 def _log(msg: str) -> None:
-    print(f"[icecast-source] {msg}", flush=True)
+    logger.info(msg)
 
 
 def main():

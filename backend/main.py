@@ -1,8 +1,14 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+logger = logging.getLogger("navo")
+APP_START_TIME = 0.0
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,36 +46,90 @@ def _run_migrations():
             with engine.connect() as conn:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 conn.commit()
-        except Exception:
-            pass  # column already exists
+            logger.info("Migration: added %s.%s", table, col)
+        except Exception as e:
+            err = str(e).lower()
+            if "duplicate" in err or "already exists" in err:
+                pass  # column already exists
+            else:
+                logger.warning("Migration %s.%s failed: %s", table, col, e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global APP_START_TIME
+    APP_START_TIME = time.time()
     Base.metadata.create_all(bind=engine)
     _run_migrations()
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    logger.info("NAVO RADIO API started")
     yield
 
 
 app = FastAPI(title="NAVO RADIO API", lifespan=lifespan)
 
+# CORS: из .env CORS_ORIGINS или дефолт
+_default_origins = [
+    "http://localhost:5173", "http://localhost:5174",
+    "http://127.0.0.1:5173", "http://127.0.0.1:5174",
+    "https://navoradio.com", "https://www.navoradio.com",
+    "http://navoradio.com", "http://www.navoradio.com",
+]
+_cors_origins = [o.strip() for o in (settings.cors_origins or "").split(",") if o.strip()] or _default_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "https://navoradio.com",
-        "https://www.navoradio.com",
-        "http://navoradio.com",
-        "http://www.navoradio.com",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Публичные API (без X-Admin-Key): диагностика, now-playing, stream-url, проверка ключа
+_PUBLIC_PATHS = {
+    "/api/diagnostics",
+    "/api/broadcast/now-playing",
+    "/api/broadcast/stream-url",
+    "/api/broadcast/playlist-urls",
+    "/api/playback-hint",
+    "/api/auth/check",
+}
+
+
+async def _admin_auth_middleware(request, call_next):
+    """Если ADMIN_API_KEY задан — требовать X-Admin-Key для защищённых путей."""
+    key = getattr(settings, "admin_api_key", "") or ""
+    if not key:
+        return await call_next(request)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    if path in _PUBLIC_PATHS:
+        return await call_next(request)
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    provided = request.headers.get("X-Admin-Key") or request.headers.get("Authorization", "").replace("Bearer ", "")
+    if provided and provided == key:
+        return await call_next(request)
+    from starlette.responses import JSONResponse
+    return JSONResponse({"detail": "Требуется X-Admin-Key"}, status_code=401)
+
+
+from starlette.middleware.base import BaseHTTPMiddleware
+app.add_middleware(BaseHTTPMiddleware, dispatch=_admin_auth_middleware)
+
+# Auth check (публичный) — для входа в админку
+@app.post("/api/auth/check")
+def auth_check(data: dict = Body(default_factory=dict)):
+    """Проверить API-ключ. Вернуть {ok: true} при совпадении."""
+    key = getattr(settings, "admin_api_key", "") or ""
+    if not key:
+        return {"ok": True, "auth_required": False}
+    provided = (data.get("key") or "").strip()
+    if provided == key:
+        return {"ok": True, "auth_required": True}
+    raise HTTPException(401, "Неверный ключ")
 
 app.include_router(admin_router, prefix="/api")
 app.include_router(songs_router, prefix="/api")
@@ -97,6 +157,12 @@ def root():
     return {"message": "NAVO RADIO API", "docs": "/docs"}
 
 
+@app.get("/health")
+def health():
+    """Лёгкая проверка живости для load balancer / мониторинга. БД не трогает."""
+    return {"ok": True, "uptime_sec": round(time.time() - APP_START_TIME, 1)}
+
+
 @app.get("/api/diagnostics")
 def diagnostics(db=Depends(get_db)):
     """Диагностика: статус БД, эфир, stream, Icecast. Для отладки проблем воспроизведения."""
@@ -106,7 +172,7 @@ def diagnostics(db=Depends(get_db)):
 
     from services.streamer_service import moscow_date, get_playlist_with_times, ensure_broadcast_for_date
 
-    result = {"ok": True, "ts": datetime.now(timezone.utc).isoformat(), "checks": {}}
+    result = {"ok": True, "ts": datetime.now(timezone.utc).isoformat(), "checks": {}, "monitoring": {"uptime_sec": round(time.time() - APP_START_TIME, 1)}}
     try:
         today = moscow_date()
         result["moscow_date"] = str(today)
@@ -141,6 +207,8 @@ def diagnostics(db=Depends(get_db)):
             result["checks"]["icecast_live"] = e.code
         except (URLError, OSError) as e:
             result["checks"]["icecast_live"] = f"unreachable: {type(e).__name__}"
+
+        result["monitoring"]["health_ok"] = True
 
     except Exception as e:
         result["ok"] = False
