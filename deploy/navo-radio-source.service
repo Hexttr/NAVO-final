@@ -11,7 +11,6 @@ Environment="PATH=/opt/navo-radio/venv/bin:/usr/bin:/bin"
 Environment="ICECAST_HOST=127.0.0.1"
 Environment="ICECAST_PORT=8001"
 Environment="ICECAST_MOUNT=live"
-Environment="ICECAST_SOURCE_PASSWORD=navo-icecast-source-2024"
 Environment="USE_EXTERNAL_TIME=false"
 # ffmpeg_concat — бесшовный поток, единый FFmpeg; async — сырая конкатенация
 Environment="STREAM_MODE=ffmpeg_concat"

@@ -12,6 +12,7 @@ import {
   getTtsVoices,
   getSongAudioUrl,
   getSongDjAudioUrl,
+  fetchAudioBlobUrl,
 } from "../../api";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -53,6 +54,7 @@ export default function SongsDj() {
   const [playingId, setPlayingId] = useState(null);
   const [playingDjId, setPlayingDjId] = useState(null);
   const audioRef = useRef(null);
+  const blobUrlRef = useRef(null);
 
   useEffect(() => {
     const ta = editTextareaRef.current;
@@ -61,6 +63,14 @@ export default function SongsDj() {
       ta.style.height = Math.max(80, ta.scrollHeight) + "px";
     }
   }, [editingText, editingDj]);
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     load();
@@ -302,34 +312,52 @@ export default function SongsDj() {
     load();
   };
 
-  const handlePlay = (song) => {
+  const handlePlay = async (song) => {
     if (!song.file_path) return;
     const audio = audioRef.current;
-    const url = getSongAudioUrl(song.id);
     if (playingId === song.id && audio && !audio.paused) {
       audio.pause();
       setPlayingId(null);
-    } else {
-      setPlayingDjId(null);
-      audio.src = url;
+      return;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setPlayingDjId(null);
+    try {
+      const blobUrl = await fetchAudioBlobUrl(getSongAudioUrl(song.id));
+      blobUrlRef.current = blobUrl;
+      audio.src = blobUrl;
       audio.play();
       setPlayingId(song.id);
+    } catch (e) {
+      alert(e.message || "Не удалось загрузить аудио");
     }
   };
 
-  const handlePlayDj = (song) => {
+  const handlePlayDj = async (song) => {
     if (!song.dj_audio_path) return;
     const audio = audioRef.current;
-    let url = getSongDjAudioUrl(song.id);
     if (playingDjId === song.id && audio && !audio.paused) {
       audio.pause();
       setPlayingDjId(null);
-    } else {
-      setPlayingId(null);
-      url += (url.includes("?") ? "&" : "?") + "t=" + Date.now();
-      audio.src = url;
+      return;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setPlayingId(null);
+    try {
+      const url = getSongDjAudioUrl(song.id) + (getSongDjAudioUrl(song.id).includes("?") ? "&" : "?") + "t=" + Date.now();
+      const blobUrl = await fetchAudioBlobUrl(url);
+      blobUrlRef.current = blobUrl;
+      audio.src = blobUrl;
       audio.play();
       setPlayingDjId(song.id);
+    } catch (e) {
+      alert(e.message || "Не удалось загрузить аудио");
     }
   };
 

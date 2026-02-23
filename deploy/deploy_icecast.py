@@ -1,15 +1,28 @@
 """
 Деплой Icecast + Source для NAVO RADIO.
 Запуск: python deploy/deploy_icecast.py
+Пароли Icecast берутся из локального .env (ICECAST_SOURCE_PASSWORD, ICECAST_ADMIN_PASSWORD).
 """
+import base64
 import os
+from pathlib import Path
+
 import paramiko
+from dotenv import load_dotenv
+
+# Загружаем .env из корня проекта
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 HOST = os.environ.get("NAVO_SSH_HOST", "195.133.63.34")
 USER = "root"
 PASSWORD = os.environ.get("NAVO_SSH_PASSWORD")
+ICECAST_SOURCE_PW = os.environ.get("ICECAST_SOURCE_PASSWORD")
+ICECAST_ADMIN_PW = os.environ.get("ICECAST_ADMIN_PASSWORD")
+
 if not PASSWORD:
-    raise SystemExit("NAVO_SSH_PASSWORD не задан. Укажите в .env или переменных окружения.")
+    raise SystemExit("NAVO_SSH_PASSWORD не задан. Укажите в .env.")
+if not ICECAST_SOURCE_PW:
+    raise SystemExit("ICECAST_SOURCE_PASSWORD не задан в .env.")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP = "/opt/navo-radio"
 
@@ -39,7 +52,19 @@ def main():
         print("2. Настройка Icecast (порт 8001)...")
         run(client, "cp /etc/icecast2/icecast.xml /etc/icecast2/icecast.xml.bak 2>/dev/null; true", check=False)
         run(client, "sed -i 's/<port>8000<\\/port>/<port>8001<\\/port>/' /etc/icecast2/icecast.xml 2>/dev/null; true", check=False)
-        run(client, "sed -i 's/<source-password>hackme<\\/source-password>/<source-password>navo-icecast-source-2024<\\/source-password>/' /etc/icecast2/icecast.xml 2>/dev/null; true", check=False)
+        # Подставляем пароли из .env (base64 — безопасно для спецсимволов)
+        pw_b64 = base64.b64encode(ICECAST_SOURCE_PW.encode()).decode()
+        admin_b64 = base64.b64encode((ICECAST_ADMIN_PW or ICECAST_SOURCE_PW).encode()).decode()
+        py_script = f"""import base64,re
+pw=base64.b64decode('{pw_b64}').decode()
+adm=base64.b64decode('{admin_b64}').decode()
+p='/etc/icecast2/icecast.xml'
+with open(p) as f:c=f.read()
+c=re.sub(r'<source-password>.*?</source-password>',f'<source-password>{{pw}}</source-password>',c)
+c=re.sub(r'<relay-password>.*?</relay-password>',f'<relay-password>{{pw}}</relay-password>',c)
+c=re.sub(r'<admin-password>.*?</admin-password>',f'<admin-password>{{adm}}</admin-password>',c)
+with open(p,'w') as f:f.write(c)"""
+        run(client, f"python3 -c {repr(py_script)}")
 
         print("3. Копирование конфигов...")
         sftp = client.open_sftp()

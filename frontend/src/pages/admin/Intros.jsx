@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Square, Volume2 } from "lucide-react";
-import { getIntros, createIntro, deleteIntro, getIntroAudioUrl, applyIntroVolumeBoost } from "../../api";
+import { Play, Square } from "lucide-react";
+import { getIntros, createIntro, deleteIntro, getIntroAudioUrl, fetchAudioBlobUrl } from "../../api";
 import "./EntityPage.css";
 
 export default function Intros() {
@@ -8,9 +8,15 @@ export default function Intros() {
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
   const [playingId, setPlayingId] = useState(null);
-  const [boostLoading, setBoostLoading] = useState(false);
   const fileRef = useRef(null);
   const audioRef = useRef(null);
+  const blobUrlRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     load();
@@ -39,30 +45,26 @@ export default function Intros() {
     load();
   };
 
-  const handleBoost = async () => {
-    setBoostLoading(true);
-    try {
-      const res = await applyIntroVolumeBoost();
-      alert(res.message || `Обновлено ${res.updated} интро`);
-      if (res.updated > 0) load();
-    } catch (e) {
-      alert(e.message || "Ошибка");
-    } finally {
-      setBoostLoading(false);
-    }
-  };
-
-  const handlePlay = (item) => {
+  const handlePlay = async (item) => {
     if (!item.file_path) return;
     const audio = audioRef.current;
-    const url = getIntroAudioUrl(item.id);
     if (playingId === item.id && audio && !audio.paused) {
       audio.pause();
       setPlayingId(null);
-    } else {
-      audio.src = url;
+      return;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    try {
+      const blobUrl = await fetchAudioBlobUrl(getIntroAudioUrl(item.id));
+      blobUrlRef.current = blobUrl;
+      audio.src = blobUrl;
       audio.play();
       setPlayingId(item.id);
+    } catch (e) {
+      alert(e.message || "Не удалось загрузить аудио");
     }
   };
 
@@ -73,11 +75,6 @@ export default function Intros() {
       <h2>ИНТРО</h2>
 
       <div className="entity-actions">
-        <div className="entity-toolbar">
-          <button onClick={handleBoost} disabled={boostLoading || !items.length}>
-            <Volume2 size={16} /> Усилить громкость всех
-          </button>
-        </div>
         <div className="add-manual">
           <input
             placeholder="Название"

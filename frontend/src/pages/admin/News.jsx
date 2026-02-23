@@ -13,6 +13,7 @@ import {
   clearOldNews,
   getTtsVoices,
   getNewsAudioUrl,
+  fetchAudioBlobUrl,
 } from "../../api";
 import "./EntityPage.css";
 
@@ -34,8 +35,15 @@ export default function News() {
   const [oldCount, setOldCount] = useState(0);
   const [clearingOld, setClearingOld] = useState(false);
   const audioRef = useRef(null);
+  const blobUrlRef = useRef(null);
 
   const PREVIEW_LEN = 100;
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     load();
@@ -116,17 +124,26 @@ export default function News() {
     setTtsProgress(null);
   };
 
-  const handlePlay = (item) => {
+  const handlePlay = async (item) => {
     if (!item.audio_path) return;
     const audio = audioRef.current;
-    const url = getNewsAudioUrl(item.id);
     if (playingId === item.id && audio && !audio.paused) {
       audio.pause();
       setPlayingId(null);
-    } else {
-      audio.src = url;
+      return;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    try {
+      const blobUrl = await fetchAudioBlobUrl(getNewsAudioUrl(item.id));
+      blobUrlRef.current = blobUrl;
+      audio.src = blobUrl;
       audio.play();
       setPlayingId(item.id);
+    } catch (e) {
+      alert(e.message || "Не удалось загрузить аудио");
     }
   };
 

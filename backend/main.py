@@ -145,16 +145,18 @@ def _check_auth_rate_limit(ip: str) -> None:
 # Auth check (публичный) — для входа в админку
 @app.post("/api/auth/check")
 def auth_check(request: Request, data: dict = Body(default_factory=dict)):
-    """Проверить API-ключ. Rate limit: 5 неверных попыток/мин с IP."""
+    """Проверить API-ключ. Rate limit: 5 неверных попыток/мин с IP. Пустой key — только проверка auth_required, без 401."""
     key = getattr(settings, "admin_api_key", "") or ""
     if not key:
         return {"ok": True, "auth_required": False}
+    provided = (data.get("key") or "").strip()
+    if not provided:
+        return {"ok": False, "auth_required": True}
     ip = request.client.host if request.client else "unknown"
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         ip = forwarded.split(",")[0].strip()
     _check_auth_rate_limit(ip)
-    provided = (data.get("key") or "").strip()
     if provided == key:
         return {"ok": True, "auth_required": True}
     _record_auth_failure(ip)

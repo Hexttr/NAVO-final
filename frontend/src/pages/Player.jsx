@@ -49,7 +49,7 @@ export default function Player() {
       });
     } catch (e) {
       useStreamFallbackRef.current = true;
-      const fallback = "http://localhost:8000/stream?t=" + Date.now();
+      const fallback = (typeof window !== "undefined" ? window.location.origin : "") + "/stream?t=" + Date.now();
       audio.src = fallback;
       audio.play().catch(() => {
         setError("Не удалось воспроизвести. Проверьте эфир в админке.");

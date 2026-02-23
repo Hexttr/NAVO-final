@@ -32,6 +32,7 @@ import {
   getWeatherAudioUrl,
   getPodcastAudioUrl,
   getIntroAudioUrl,
+  fetchAudioBlobUrl,
 } from "../../api";
 import "./Broadcast.css";
 
@@ -67,6 +68,7 @@ export default function Broadcast() {
   const [selectedVoice, setSelectedVoice] = useState("ru-RU-DmitryNeural");
   const textareaRef = useRef(null);
   const playAudioRef = useRef(null);
+  const playBlobUrlRef = useRef(null);
   const activeRowRef = useRef(null);
   const lastViewIndexRef = useRef(null);
   const [playingItemId, setPlayingItemId] = useState(null);
@@ -268,8 +270,8 @@ export default function Broadcast() {
     return null;
   };
 
-  const handlePlay = (item) => {
-    let url = getAudioUrl(item);
+  const handlePlay = async (item) => {
+    const url = getAudioUrl(item);
     if (!url || !playAudioRef.current) return;
     const audio = playAudioRef.current;
     if (playingItemId === item.id) {
@@ -277,10 +279,19 @@ export default function Broadcast() {
       setPlayingItemId(null);
       return;
     }
-    url += (url.includes("?") ? "&" : "?") + "t=" + Date.now();
-    audio.src = url;
-    audio.play();
-    setPlayingItemId(item.id);
+    if (playBlobUrlRef.current) {
+      URL.revokeObjectURL(playBlobUrlRef.current);
+      playBlobUrlRef.current = null;
+    }
+    try {
+      const blobUrl = await fetchAudioBlobUrl(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now());
+      playBlobUrlRef.current = blobUrl;
+      audio.src = blobUrl;
+      audio.play();
+      setPlayingItemId(item.id);
+    } catch (e) {
+      alert(e.message || "Не удалось загрузить аудио");
+    }
   };
 
   useEffect(() => {
@@ -293,6 +304,10 @@ export default function Broadcast() {
     return () => {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("pause", onPause);
+      if (playBlobUrlRef.current) {
+        URL.revokeObjectURL(playBlobUrlRef.current);
+        playBlobUrlRef.current = null;
+      }
     };
   }, []);
 

@@ -14,20 +14,34 @@ export default function AdminAuthGate({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const onUnauth = () => setNeedsAuth(true);
+    const onUnauth = () => {
+      localStorage.removeItem("admin_api_key");
+      setNeedsAuth(true);
+    };
     window.addEventListener("admin-unauth", onUnauth);
-    checkAuth("")
-      .then((res) => {
+    (async () => {
+      try {
+        const res = await checkAuth("");
         if (res.auth_required === false) {
           setNeedsAuth(false);
-        } else if (hasStoredAdminKey()) {
-          setNeedsAuth(false);
-        } else {
-          setNeedsAuth(true);
+          return;
         }
-      })
-      .catch(() => setNeedsAuth(true))
-      .finally(() => setLoading(false));
+        const stored = localStorage.getItem("admin_api_key");
+        if (stored) {
+          const verified = await checkAuth(stored);
+          if (verified.ok) {
+            setNeedsAuth(false);
+            return;
+          }
+          localStorage.removeItem("admin_api_key");
+        }
+        setNeedsAuth(true);
+      } catch {
+        setNeedsAuth(true);
+      } finally {
+        setLoading(false);
+      }
+    })();
     return () => window.removeEventListener("admin-unauth", onUnauth);
   }, []);
 

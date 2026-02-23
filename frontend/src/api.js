@@ -77,18 +77,30 @@ export async function getSong(songId) {
   return r.json();
 }
 
+const _base = () => API.replace("/api", "") || "";
+
 export function getSongAudioUrl(songId) {
-  return `${API.replace("/api", "")}/api/songs/${songId}/audio`;
+  return `${_base()}/api/songs/${songId}/audio`;
 }
 
 export function getSongDjAudioUrl(songId) {
-  return `${API.replace("/api", "")}/api/songs/${songId}/dj-audio`;
+  return `${_base()}/api/songs/${songId}/dj-audio`;
 }
+
 export function getPodcastAudioUrl(podcastId) {
-  return `${API.replace("/api", "")}/api/podcasts/${podcastId}/audio`;
+  return `${_base()}/api/podcasts/${podcastId}/audio`;
 }
+
 export function getIntroAudioUrl(introId) {
-  return `${API.replace("/api", "")}/api/intros/${introId}/audio`;
+  return `${_base()}/api/intros/${introId}/audio`;
+}
+
+/** Загрузить аудио с учётом X-Admin-Key (для <audio> нельзя передать заголовки). Возвращает blob URL — вызывающий должен revoke при смене трека. */
+export async function fetchAudioBlobUrl(url) {
+  const r = await apiFetch(url);
+  if (!r.ok) throw new Error("Ошибка загрузки аудио");
+  const blob = await r.blob();
+  return URL.createObjectURL(blob);
 }
 
 export async function createSong(data) {
@@ -363,11 +375,6 @@ export async function deletePodcast(podcastId) {
   return r.json();
 }
 
-export async function applyPodcastVolumeBoost() {
-  const r = await apiFetch(`${API}/podcasts/apply-volume-boost`, { method: "POST" });
-  return r.json();
-}
-
 export async function getIntros() {
   const r = await apiFetch(`${API}/intros`);
   return r.json();
@@ -383,11 +390,6 @@ export async function createIntro(title, file) {
 
 export async function deleteIntro(introId) {
   const r = await apiFetch(`${API}/intros/${introId}`, { method: "DELETE" });
-  return r.json();
-}
-
-export async function applyIntroVolumeBoost() {
-  const r = await apiFetch(`${API}/intros/apply-volume-boost`, { method: "POST" });
   return r.json();
 }
 

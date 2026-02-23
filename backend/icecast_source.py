@@ -32,7 +32,7 @@ from services.streamer_service import (
 ICECAST_HOST = os.environ.get("ICECAST_HOST", "127.0.0.1")
 ICECAST_PORT = int(os.environ.get("ICECAST_PORT", "8001"))
 ICECAST_MOUNT = os.environ.get("ICECAST_MOUNT", "live")
-ICECAST_SOURCE_PASSWORD = os.environ.get("ICECAST_SOURCE_PASSWORD", "navo-icecast-source-2024")
+ICECAST_SOURCE_PASSWORD = os.environ.get("ICECAST_SOURCE_PASSWORD", "")
 
 shutdown = False
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")

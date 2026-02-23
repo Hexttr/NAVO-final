@@ -12,10 +12,11 @@
         <source-timeout>30</source-timeout>
     </limits>
     <authentication>
-        <source-password>navo-icecast-source-2024</source-password>
-        <relay-password>navo-icecast-relay</relay-password>
+        <!-- Пароли подставляются при деплое из .env (ICECAST_SOURCE_PASSWORD, ICECAST_ADMIN_PASSWORD) -->
+        <source-password>CHANGE_ME</source-password>
+        <relay-password>CHANGE_ME</relay-password>
         <admin-user>admin</admin-user>
-        <admin-password>navo-icecast-admin</admin-password>
+        <admin-password>CHANGE_ME</admin-password>
     </authentication>
     <hostname>navoradio.com</hostname>
     <http-headers>
