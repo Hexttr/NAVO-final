@@ -175,7 +175,11 @@ async def regenerate_news(
 
 
 @router.post("/{news_id}/tts")
-async def generate_news_audio(news_id: int, voice: str = "ru-RU-DmitryNeural", db: Session = Depends(get_db)):
+async def generate_news_audio(
+    news_id: int,
+    voice: str = Query("ru-RU-DmitryNeural", description="Edge TTS voice ID"),
+    db: Session = Depends(get_db),
+):
     n = db.get(News,news_id)
     if not n or not n.text:
         raise HTTPException(400, "News or text not found")

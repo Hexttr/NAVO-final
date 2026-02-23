@@ -197,7 +197,11 @@ async def generate_dj(song_id: int, db: Session = Depends(get_db)):
     return {"dj_text": text}
 
 @router.post("/{song_id}/tts")
-async def generate_dj_audio(song_id: int, voice: str = "ru-RU-DmitryNeural", db: Session = Depends(get_db)):
+async def generate_dj_audio(
+    song_id: int,
+    voice: str = Query("ru-RU-DmitryNeural", description="Edge TTS voice ID"),
+    db: Session = Depends(get_db),
+):
     song = db.get(Song,song_id)
     if not song or not song.dj_text:
         raise HTTPException(400, "Song or DJ text not found")

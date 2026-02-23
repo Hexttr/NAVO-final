@@ -163,7 +163,11 @@ async def regenerate_weather(
 
 
 @router.post("/{weather_id}/tts")
-async def generate_weather_audio(weather_id: int, voice: str = "ru-RU-DmitryNeural", db: Session = Depends(get_db)):
+async def generate_weather_audio(
+    weather_id: int,
+    voice: str = Query("ru-RU-DmitryNeural", description="Edge TTS voice ID"),
+    db: Session = Depends(get_db),
+):
     w = db.get(Weather,weather_id)
     if not w or not w.text:
         raise HTTPException(400, "Weather or text not found")
