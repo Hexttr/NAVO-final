@@ -71,6 +71,13 @@
 
 .add-manual .add-btn {
   margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.add-manual .add-btn-spinner {
+  animation: spin 1s linear infinite;
 }
 
 .entity-toolbar {

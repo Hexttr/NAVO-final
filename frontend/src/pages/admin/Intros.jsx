@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Square } from "lucide-react";
+import { Play, Square, Loader2 } from "lucide-react";
 import { getIntros, createIntro, deleteIntro, getIntroAudioUrl, fetchAudioBlobUrl } from "../../api";
 import "./EntityPage.css";
 
 export default function Intros() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [playingId, setPlayingId] = useState(null);
   const fileRef = useRef(null);
@@ -33,10 +34,15 @@ export default function Intros() {
       alert("Введите название и выберите MP3");
       return;
     }
-    await createIntro(newTitle.trim(), file);
-    setNewTitle("");
-    if (fileRef.current) fileRef.current.value = "";
-    load();
+    setUploading(true);
+    try {
+      await createIntro(newTitle.trim(), file);
+      setNewTitle("");
+      if (fileRef.current) fileRef.current.value = "";
+      load();
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -85,8 +91,12 @@ export default function Intros() {
             <input type="file" ref={fileRef} accept=".mp3" />
             <span>Выберите файл</span>
           </label>
-          <button className="add-btn" onClick={handleAdd} disabled={!newTitle.trim()}>
-            Добавить
+          <button className="add-btn" onClick={handleAdd} disabled={!newTitle.trim() || uploading}>
+            {uploading ? (
+              <><Loader2 size={16} className="add-btn-spinner" /> Загрузка...</>
+            ) : (
+              "Добавить"
+            )}
           </button>
         </div>
       </div>

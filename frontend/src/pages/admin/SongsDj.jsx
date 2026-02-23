@@ -225,7 +225,7 @@ export default function SongsDj() {
   const handleTts = async (songId) => {
     setRevoicingSongId(songId);
     try {
-      const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
+      const voiceToUse = selectedVoice || voices[0]?.[0] || "ru-RU-DmitryNeural";
       await generateDjTts(songId, voiceToUse);
       load();
     } catch (e) {
@@ -241,7 +241,7 @@ export default function SongsDj() {
       alert("Нет треков с текстом DJ для озвучки");
       return;
     }
-    const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
+    const voiceToUse = selectedVoice || voices[0]?.[0] || "ru-RU-DmitryNeural";
     saveBatch(DJ_BATCH_KEY, null);
     saveBatch(TTS_BATCH_KEY, { songIds: ids, total: ids.length, voice: voiceToUse });
     setTtsBatchProgress({ current: 0, total: ids.length });
@@ -291,7 +291,7 @@ export default function SongsDj() {
 
   const handleRevoiceInEdit = async (songId, currentText) => {
     if (!currentText?.trim()) return;
-    const voiceToUse = selectedVoice.startsWith("ru-RU-") ? voices[0]?.[0] || "dVRDrbP5ULGXB94se4KZ" : selectedVoice;
+    const voiceToUse = selectedVoice || voices[0]?.[0] || "ru-RU-DmitryNeural";
     setRevoicingSongId(songId);
     try {
       await updateSong(songId, { dj_text: currentText });
