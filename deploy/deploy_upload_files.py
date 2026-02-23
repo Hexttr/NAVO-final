@@ -7,7 +7,9 @@ import paramiko
 
 HOST = os.environ.get("NAVO_SSH_HOST", "195.133.63.34")
 USER = os.environ.get("NAVO_SSH_USER", "root")
-PASSWORD = os.environ.get("NAVO_SSH_PASSWORD", "hdp-k.PD6u8K7U")
+PASSWORD = os.environ.get("NAVO_SSH_PASSWORD")
+if not PASSWORD:
+    raise SystemExit("NAVO_SSH_PASSWORD не задан. Укажите в .env или переменных окружения.")
 APP_DIR = "/opt/navo-radio"
 
 # Локальные пути -> удалённые пути (добавляйте при изменении)

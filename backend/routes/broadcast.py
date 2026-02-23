@@ -15,6 +15,7 @@ from models import BroadcastItem, Song, News, Weather
 from services.broadcast_generator import generate_broadcast
 from services.broadcast_service import recalc_times, get_entity_duration, get_entity_meta
 from services.streamer_service import get_entity_duration_from_file, get_playlist_with_times, ensure_broadcast_for_date
+from utils.time_utils import sec_to_hms, time_str
 from config import settings
 
 router = APIRouter(prefix="/broadcast", tags=["broadcast"])
@@ -98,18 +99,16 @@ def diagnostics_now_playing(
     from services.streamer_service import moscow_date, moscow_seconds_now, get_playlist_with_times, _find_track_at_position
     from services.stream_position import read_now_playing, read_stream_position, get_stream_position_path
     from services.broadcast_service import get_entity_meta
-    from services.time_service import moscow_seconds_from_api
     import time
     import json
 
     slot_db_detail = slot_real_detail = None  # инициализация до try (для except)
     try:
-        time_source = "system" if not getattr(settings, "use_external_time", False) else ("worldtimeapi" if moscow_seconds_from_api() is not None else "system")
+        time_source = "system"
         broadcast_date = d or moscow_date()
         ensure_broadcast_for_date(db, broadcast_date)
         now_sec = moscow_seconds_now()
-        h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
-        moscow_time_str = f"{h:02d}:{m:02d}:{s:02d}"
+        moscow_time_str = time_str(*sec_to_hms(now_sec))
 
         # 1. stream_position.json
         sp_path = get_stream_position_path()
@@ -227,9 +226,7 @@ def diagnostics_now_playing(
 
         first_slot_start = None
         if playlist and len(playlist) > 0:
-            first_slot_start = playlist[0][1]
-            h, m, s = first_slot_start // 3600, (first_slot_start % 3600) // 60, first_slot_start % 60
-            first_slot_start = f"{h:02d}:{m:02d}:{s:02d}"
+            first_slot_start = time_str(*sec_to_hms(int(playlist[0][1])))
 
         return {
             "moscow_time": moscow_time_str,
@@ -333,7 +330,6 @@ def debug_time(
     from services.streamer_service import moscow_date, moscow_seconds_now
 
     now_sec = moscow_seconds_now()
-    h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
     broadcast_date = d or moscow_date()
     items = (
         db.query(BroadcastItem)
@@ -353,7 +349,7 @@ def debug_time(
             current = {"entity_type": it.entity_type, "entity_id": it.entity_id, "start_time": it.start_time}
             break
     return {
-        "server_time": f"{h:02d}:{m:02d}:{s:02d}",
+        "server_time": time_str(*sec_to_hms(now_sec)),
         "server_date": str(broadcast_date),
         "now_sec": now_sec,
         "current_item": current,
@@ -412,8 +408,7 @@ def get_now_playing(
         else:
             now_sec = moscow_seconds_now()
         now_sec = max(0, min(86400, now_sec))
-        h, m, s = int(now_sec) // 3600, (int(now_sec) % 3600) // 60, int(now_sec) % 60
-        current_time = f"{h:02d}:{m:02d}:{s:02d}"
+        current_time = time_str(*sec_to_hms(int(now_sec)))
 
         items = (
             db.query(BroadcastItem)

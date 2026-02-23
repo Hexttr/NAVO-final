@@ -58,7 +58,7 @@ async def _call_openai(db: Session, system_prompt: str, user_content: str) -> st
     if not api_key:
         raise RuntimeError("API ключ OpenAI не задан. Выберите ChatGPT в настройках и введите ключ.")
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={

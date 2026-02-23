@@ -17,6 +17,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal
 from services.stream_position import write_stream_position
+from utils.time_utils import sec_to_hms, time_str
 from services.streamer_service import (
     get_playlist_with_times,
     stream_broadcast_ffmpeg_concat,
@@ -52,6 +53,9 @@ def main():
     async def run_source():
         schedule_changed = False
         retry_delay = 5
+        max_retry_delay = 60
+        consecutive_failures = 0
+        max_consecutive_failures = 10
         while not shutdown:
             try:
                 db = SessionLocal()
@@ -65,14 +69,21 @@ def main():
                 finally:
                     db.close()
             except Exception as e:
-                _log(f"Ошибка загрузки эфира: {e}")
-                await asyncio.sleep(min(retry_delay, 60))
-                retry_delay = min(retry_delay * 2, 60)
+                consecutive_failures += 1
+                _log(f"Ошибка загрузки эфира ({consecutive_failures}/{max_consecutive_failures}): {e}")
+                if consecutive_failures >= max_consecutive_failures:
+                    _log("Превышен лимит попыток. Пауза 60 сек перед сбросом счётчика.")
+                    await asyncio.sleep(max_retry_delay)
+                    consecutive_failures = 0
+                else:
+                    await asyncio.sleep(min(retry_delay, max_retry_delay))
+                    retry_delay = min(retry_delay * 2, max_retry_delay)
                 continue
             retry_delay = 5
+            consecutive_failures = 0
 
             if not playlist:
-                _log("Нет эфира (ни на сегодня, ни на предыдущие дни). Ожидание 60 сек...")
+                _log(f"Нет эфира на {today}. Админка → выберите дату с эфиром → «Скопировать эфир на завтра». Ожидание 60 сек...")
                 await asyncio.sleep(60)
                 continue
 
@@ -84,9 +95,14 @@ def main():
                 await asyncio.sleep(10)
                 continue
 
-            h, m, s = now_sec // 3600, (now_sec % 3600) // 60, now_sec % 60
-            _log(f"Стриминг эфира в Icecast ({len(playlist)} треков), старт: idx={start_idx} seek={seek_sec}s ({h:02d}:{m:02d}:{s:02d} МСК)")
+            _log(f"Стриминг эфира в Icecast ({len(playlist)} треков), старт: idx={start_idx} seek={seek_sec}s ({time_str(*sec_to_hms(now_sec))} МСК)")
             icecast_url = f"icecast://source:{ICECAST_SOURCE_PASSWORD}@{ICECAST_HOST}:{ICECAST_PORT}/{ICECAST_MOUNT}"
+            try:
+                from urllib.request import urlopen
+                with urlopen(f"http://{ICECAST_HOST}:{ICECAST_PORT}/", timeout=2) as r:
+                    _log(f"Icecast доступен (HTTP {r.status})")
+            except Exception as e:
+                _log(f"ВНИМАНИЕ: Icecast не отвечает на {ICECAST_HOST}:{ICECAST_PORT} — {e}. Запустите dev\\start_icecast.bat")
             ffmpeg_cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-re", "-f", "mp3", "-i", "pipe:0",
@@ -99,6 +115,22 @@ def main():
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
+
+            async def log_ffmpeg_stderr():
+                """Логировать stderr FFmpeg в реальном времени (ошибки подключения к Icecast)."""
+                if proc.stderr:
+                    try:
+                        while True:
+                            line = await proc.stderr.readline()
+                            if not line:
+                                break
+                            msg = line.decode(errors="replace").strip()
+                            if msg:
+                                _log(f"FFmpeg: {msg}")
+                    except Exception:
+                        pass
+
+            asyncio.create_task(log_ffmpeg_stderr())
 
             # Плейлист с реальными длительностями — для точного «Сейчас играет». Строится в фоне.
             playlist_ref = [playlist]
@@ -178,8 +210,10 @@ def main():
                     pass
                 try:
                     proc.stdin.close()
+                    if shutdown and proc.returncode is None:
+                        proc.terminate()
                     exit_code = await proc.wait()
-                    if exit_code != 0:
+                    if exit_code != 0 and not shutdown:
                         err = await proc.stderr.read() if proc.stderr else b""
                         if err:
                             _log(f"FFmpeg exit {exit_code}: {err.decode(errors='replace')[:500]}")

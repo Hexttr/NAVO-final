@@ -5,7 +5,9 @@ import os
 
 HOST = os.environ.get("NAVO_SSH_HOST", "195.133.63.34")
 USER = os.environ.get("NAVO_SSH_USER", "root")
-PASSWORD = os.environ.get("NAVO_SSH_PASSWORD", "hdp-k.PD6u8K7U")
+PASSWORD = os.environ.get("NAVO_SSH_PASSWORD")
+if not PASSWORD:
+    raise SystemExit("NAVO_SSH_PASSWORD не задан. Укажите в .env или переменных окружения.")
 
 c = paramiko.SSHClient()
 c.set_missing_host_key_policy(paramiko.AutoAddPolicy())

@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from config import settings
+from utils.time_utils import sec_to_hms, time_str
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 STREAM_POSITION_FILE = "stream_position.json"
@@ -64,8 +65,7 @@ def read_now_playing() -> dict | None:
         if time.time() - ts > max_age:
             return None
         pos = float(data.get("position_sec", 0))
-        h, m, s = int(pos) // 3600, (int(pos) % 3600) // 60, int(pos) % 60
-        current_time = f"{h:02d}:{m:02d}:{s:02d}"
+        current_time = time_str(*sec_to_hms(int(pos)))
         result = {"currentTime": current_time}
         if "entity_type" in data and "entity_id" in data:
             result["entity_type"] = data["entity_type"]

@@ -27,8 +27,7 @@ class Settings(BaseSettings):
     stream_bitrate: str = "256k"
     # Смещение эфира в секундах: +120 = на 2 мин вперёд (если запаздывает), -60 = на 1 мин назад
     sync_offset_seconds: int = 0
-    # Московское время: False = системное (сервер в Europe/Moscow), True = worldtimeapi.org
-    use_external_time: bool = False
+    # Московское время: всегда системное (сервер в Europe/Moscow)
 
     class Config:
         env_file = str(_env_path)

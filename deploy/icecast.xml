@@ -18,6 +18,9 @@
         <admin-password>navo-icecast-admin</admin-password>
     </authentication>
     <hostname>navoradio.com</hostname>
+    <http-headers>
+        <header name="Access-Control-Allow-Origin" value="*" />
+    </http-headers>
     <listen-socket>
         <port>8001</port>
     </listen-socket>

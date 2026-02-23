@@ -62,14 +62,13 @@
 
 **Где смотреть:** `backend/services/tts_service.py` — `_list_elevenlabs_voices()`
 
-### 2. Эфир не воспроизводится (сегменты грузятся, звука нет)
+### 2. Эфир не воспроизводится
 
-**Симптом:** В Network все запросы 200 (hls-url, stream.m3u8, seg_*.ts), но звука нет, ошибок в консоли нет.
+**Симптом:** Плеер не воспроизводит звук.
 
 **Что сделано:**
-- HLS: используется `startPosition` в конфиге Hls.js вместо `audio.currentTime` в MANIFEST_PARSED
 - Разблокировка AudioContext при клике Play (`unlockAudioContext`)
-- Nginx: при 400 от Icecast — fallback на backend `/stream` (`error_page 400 404 ...`)
+- При 404 от Icecast плеер переключается на backend `/stream`
 
 **Где смотреть:** `frontend/src/pages/Player.jsx`
 

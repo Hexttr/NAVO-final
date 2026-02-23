@@ -101,7 +101,7 @@ async def _tts_elevenlabs(text: str, output_path: Path, voice_id: str, db: Sessi
     if not voice_id or ("-" in voice_id and voice_id.startswith("ru-")):
         voice_id = "dVRDrbP5ULGXB94se4KZ"
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         r = await client.post(
             f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
             headers={

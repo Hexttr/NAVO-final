@@ -27,8 +27,7 @@ NAVO Radio — AI-радиостанция с эфиром по расписан
 
 **Источники эфира:**
 1. **Icecast** (основной) — navo-radio-source стримит в Icecast, Nginx проксирует /stream → Icecast
-2. **Backend /stream** (fallback) — при 404/502 от Icecast Nginx отдаёт поток с FastAPI
-3. **HLS** — VOD для seek, генерируется по запросу (~10–30 мин)
+2. **Backend /stream** (fallback) — при 404/502 от Icecast плеер переключается на FastAPI /stream
 
 ## Критические компоненты
 
@@ -36,7 +35,7 @@ NAVO Radio — AI-радиостанция с эфиром по расписан
 
 Кортеж: `(path, start_sec, dur, entity_type, entity_id, title)` — 6 элементов.
 
-Используется в: streamer_service, hls_service, broadcast routes. При изменении структуры — обновить все места распаковки.
+Используется в: streamer_service, broadcast routes. При изменении структуры — обновить все места распаковки.
 
 ### 2. stream_position.json
 
@@ -49,7 +48,7 @@ MAX_AGE_SEC=20 — данные старше 20 сек считаются уст
 
 ### 3. Московское время
 
-- **Время**: системное (сервер в Europe/Moscow). use_external_time=True — worldtimeapi.org (опционально)
+- **Время**: системное (сервер в Europe/Moscow)
 - **Сервер**: рекомендуется Europe/Moscow (TZ)
 - **sync_offset_seconds**: смещение в настройках (для коррекции рассинхрона)
 
@@ -57,7 +56,7 @@ MAX_AGE_SEC=20 — данные старше 20 сек считаются уст
 
 Админка и эфир должны использовать одни и те же длительности. См. [SYNC_DESYNC_FIX.md](SYNC_DESYNC_FIX.md).
 
-- После замены файлов — «Пересчитать длительности» в админке
+- После замены файлов — пересчёт длительностей в админке (Сетка эфира)
 - recalc_broadcast_for_date — при генерации эфира
 
 ## Рекомендации по надёжности

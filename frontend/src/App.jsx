@@ -25,7 +25,7 @@ function App() {
           <Route path="intros" element={<Intros />} />
           <Route path="settings" element={<Settings />} />
           <Route path="diagnostics" element={<Diagnostics />} />
-          <Route path="broadcast" element={<Broadcast />} />
+          <Route path="broadcast" element={<Navigate to="/admin" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

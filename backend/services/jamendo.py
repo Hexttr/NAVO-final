@@ -7,7 +7,7 @@ JAMENDO_API = "https://api.jamendo.com/v3.0"
 
 async def search_tracks(query: str, limit: int = 20) -> list[dict]:
     """Search Jamendo for tracks. Query: eastern, tajik, asian music etc."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.get(
             f"{JAMENDO_API}/tracks",
             params={
@@ -54,7 +54,7 @@ class JamendoService:
         queries = search_queries or JamendoService.SEARCH_QUERIES
         all_tracks = []
         seen_ids = set()
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             for q in queries:
                 try:
                     r = await client.get(

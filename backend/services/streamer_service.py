@@ -70,24 +70,14 @@ def _moscow_now() -> datetime:
 
 
 def moscow_date() -> date:
-    """Текущая дата по Москве. Из API при use_external_time, иначе системное время."""
-    if getattr(settings, "use_external_time", True):
-        from services.time_service import moscow_date_from_api
-        d = moscow_date_from_api()
-        if d is not None:
-            return d
+    """Текущая дата по Москве. Системное время (сервер в Europe/Moscow)."""
     return _moscow_now().date()
 
 
 def moscow_seconds_now() -> int:
-    """Секунды от полуночи МСК. Из API при use_external_time, иначе системное."""
-    base = None
-    if getattr(settings, "use_external_time", True):
-        from services.time_service import moscow_seconds_from_api
-        base = moscow_seconds_from_api()
-    if base is None:
-        now = _moscow_now()
-        base = now.hour * 3600 + now.minute * 60 + now.second
+    """Секунды от полуночи МСК. Системное время."""
+    now = _moscow_now()
+    base = now.hour * 3600 + now.minute * 60 + now.second
     offset = getattr(settings, "sync_offset_seconds", 0) or 0
     return max(0, min(86400 - 1, base + offset))
 
