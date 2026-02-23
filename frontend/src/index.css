@@ -128,6 +128,7 @@ textarea {
   color: var(--text-primary);
   width: 100%;
   margin-right: 5px;
+  margin-bottom: 5px;
 }
 input::placeholder,
 textarea::placeholder {

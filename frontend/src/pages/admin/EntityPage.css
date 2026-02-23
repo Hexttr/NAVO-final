@@ -29,8 +29,48 @@
   border: 1px solid var(--border-strong);
 }
 
-.add-manual input {
+.add-manual input[type="text"],
+.add-manual input[type="number"] {
   width: 140px;
+}
+
+/* Кнопка «Выберите файл» — тёмная тема */
+.file-input-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 200px;
+  padding: 0.5rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.file-input-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.file-input-btn input {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.file-input-btn span {
+  pointer-events: none;
+}
+
+.add-manual .add-btn {
+  margin-left: 10px;
 }
 
 .entity-toolbar {

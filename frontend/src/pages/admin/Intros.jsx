@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { getIntros, createIntro, deleteIntro } from "../../api";
+import { Play, Square } from "lucide-react";
+import { getIntros, createIntro, deleteIntro, getIntroAudioUrl } from "../../api";
 import "./EntityPage.css";
 
 export default function Intros() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
+  const [playingId, setPlayingId] = useState(null);
   const fileRef = useRef(null);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     load();
@@ -35,6 +38,20 @@ export default function Intros() {
     load();
   };
 
+  const handlePlay = (item) => {
+    if (!item.file_path) return;
+    const audio = audioRef.current;
+    const url = getIntroAudioUrl(item.id);
+    if (playingId === item.id && audio && !audio.paused) {
+      audio.pause();
+      setPlayingId(null);
+    } else {
+      audio.src = url;
+      audio.play();
+      setPlayingId(item.id);
+    }
+  };
+
   if (loading && !items.length) return <div className="loading">Загрузка...</div>;
 
   return (
@@ -48,8 +65,11 @@ export default function Intros() {
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
           />
-          <input type="file" ref={fileRef} accept=".mp3" />
-          <button onClick={handleAdd} disabled={!newTitle.trim()}>
+          <label className="file-input-btn">
+            <input type="file" ref={fileRef} accept=".mp3" />
+            <span>Выберите файл</span>
+          </label>
+          <button className="add-btn" onClick={handleAdd} disabled={!newTitle.trim()}>
             Добавить
           </button>
         </div>
@@ -69,14 +89,26 @@ export default function Intros() {
               <td>{idx + 1}</td>
               <td>{i.title}</td>
               <td>
-                <button className="danger" onClick={() => handleDelete(i.id)}>
-                  Удалить
-                </button>
+                <div className="cell-actions">
+                  {i.file_path && (
+                    <button
+                      className={`icon-btn play-btn ${playingId === i.id ? "playing" : ""}`}
+                      onClick={() => handlePlay(i)}
+                      title="Слушать"
+                    >
+                      {playingId === i.id ? <Square size={14} /> : <Play size={14} />}
+                    </button>
+                  )}
+                  <button className="danger" onClick={() => handleDelete(i.id)}>
+                    Удалить
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <audio ref={audioRef} onEnded={() => setPlayingId(null)} />
     </div>
   );
 }
