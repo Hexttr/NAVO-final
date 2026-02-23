@@ -51,6 +51,12 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         intro_min = max(0, min(59, intro_min))
     except (ValueError, TypeError):
         intro_min = DEFAULT_INTRO_MINUTE
+    try:
+        raw = get(db, "broadcast_intro_every_n_slots")
+        intro_every_n = int(raw) if raw else 0
+        intro_every_n = max(0, min(100, intro_every_n))
+    except (ValueError, TypeError):
+        intro_every_n = 0
 
     fixed_slots = []
     for s in raw_slots if isinstance(raw_slots, list) else []:
@@ -118,12 +124,14 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
             dur = _safe_duration(db, "podcast", p.id, 1800, p)
             timed_events.append((t_sec, "podcast", p.id, dur, _safe_str(getattr(p, "title", None), "Подкаст")))
 
-    for h in range(24):
-        t_sec = h * 3600 + intro_min * 60
-        if intros:
-            i = next(intro_it)
-            dur = _safe_duration(db, "intro", i.id, 30, i)
-            timed_events.append((t_sec, "intro", i.id, dur, _safe_str(getattr(i, "title", None), "Интро")))
+    # Интро: либо каждый час (intro_every_n=0), либо по слотам — тогда добавим после построения blocks
+    if intro_every_n == 0:
+        for h in range(24):
+            t_sec = h * 3600 + intro_min * 60
+            if intros:
+                i = next(intro_it)
+                dur = _safe_duration(db, "intro", i.id, 30, i)
+                timed_events.append((t_sec, "intro", i.id, dur, _safe_str(getattr(i, "title", None), "Интро")))
 
     timed_events.sort(key=lambda x: x[0])
 
@@ -170,6 +178,23 @@ def generate_broadcast(db: Session, broadcast_date: date) -> list[BroadcastItem]
         remaining = day_end - current_sec
         if not try_add_song(remaining):
             break
+
+    blocks.sort(key=lambda x: x[0])
+
+    # Интро каждые N слотов (если intro_every_n > 0)
+    if intro_every_n > 0 and intros:
+        new_blocks = []
+        current_sec = 0
+        for idx, (t_sec, et, eid, dur_sec, meta) in enumerate(blocks):
+            # Перед этим блоком вставить интро, если прошло N слотов
+            if idx > 0 and (idx % intro_every_n) == 0:
+                i = next(intro_it)
+                intro_dur = _safe_duration(db, "intro", i.id, 30, i)
+                new_blocks.append((current_sec, "intro", i.id, intro_dur, _safe_str(getattr(i, "title", None), "Интро")))
+                current_sec += intro_dur
+            new_blocks.append((current_sec, et, eid, dur_sec, meta))
+            current_sec += dur_sec
+        blocks = new_blocks
 
     blocks.sort(key=lambda x: x[0])
 

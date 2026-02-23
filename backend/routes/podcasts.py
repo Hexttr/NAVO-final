@@ -8,6 +8,7 @@ from models import Podcast
 from config import settings
 from services.streamer_service import get_entity_duration_from_file
 from utils.upload_utils import read_with_limit
+from utils.audio_utils import apply_volume_boost
 
 router = APIRouter(prefix="/podcasts", tags=["podcasts"])
 
@@ -42,6 +43,9 @@ async def create_podcast(title: str = Form(...), file: UploadFile = UploadFile(.
     content = await read_with_limit(file, max_bytes)
     path = UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}"
     path.write_bytes(content)
+    boost = getattr(settings, "podcast_intro_volume_boost", 1.0) or 1.0
+    if boost > 1.01:
+        apply_volume_boost(path, float(boost))
     p = Podcast(title=title, file_path=str(path), duration_seconds=0)
     db.add(p)
     db.commit()
@@ -52,6 +56,20 @@ async def create_podcast(title: str = Form(...), file: UploadFile = UploadFile(.
         db.commit()
         db.refresh(p)
     return p
+
+
+@router.post("/apply-volume-boost")
+def apply_podcast_volume_boost(db: Session = Depends(get_db)):
+    """Усилить громкость всех подкастов (PODCAST_INTRO_VOLUME_BOOST). Для уже загруженных."""
+    boost = getattr(settings, "podcast_intro_volume_boost", 1.0) or 1.0
+    if boost <= 1.01:
+        return {"updated": 0, "message": "PODCAST_INTRO_VOLUME_BOOST не задан или 1.0"}
+    updated = 0
+    for p in db.query(Podcast).filter(Podcast.file_path != "").all():
+        path = Path(p.file_path)
+        if path.exists() and apply_volume_boost(path, float(boost)):
+            updated += 1
+    return {"updated": updated, "message": f"Громкость усилена у {updated} подкастов"}
 
 
 @router.post("/recalc-durations")

@@ -35,6 +35,7 @@ DEFAULTS = {
         [21, 0, "news"], [22, 0, "weather"], [23, 0, "podcast"],
     ],
     "broadcast_intro_minute": 55,
+    "broadcast_intro_every_n_slots": 0,  # 0 = каждый час (intro_minute), 5/10 = каждые N слотов
     "weather_region": "dushanbe",
     "news_region": "tajikistan",
     "elevenlabs_api_key_frontend": "",

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Square } from "lucide-react";
-import { getPodcasts, createPodcast, deletePodcast, getPodcastAudioUrl } from "../../api";
+import { Play, Square, Volume2 } from "lucide-react";
+import { getPodcasts, createPodcast, deletePodcast, getPodcastAudioUrl, applyPodcastVolumeBoost } from "../../api";
 import "./EntityPage.css";
 
 export default function Podcasts() {
@@ -8,6 +8,7 @@ export default function Podcasts() {
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
   const [playingId, setPlayingId] = useState(null);
+  const [boostLoading, setBoostLoading] = useState(false);
   const fileRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -38,6 +39,19 @@ export default function Podcasts() {
     load();
   };
 
+  const handleBoost = async () => {
+    setBoostLoading(true);
+    try {
+      const res = await applyPodcastVolumeBoost();
+      alert(res.message || `Обновлено ${res.updated} подкастов`);
+      if (res.updated > 0) load();
+    } catch (e) {
+      alert(e.message || "Ошибка");
+    } finally {
+      setBoostLoading(false);
+    }
+  };
+
   const handlePlay = (item) => {
     if (!item.file_path) return;
     const audio = audioRef.current;
@@ -59,6 +73,11 @@ export default function Podcasts() {
       <h2>Подкасты</h2>
 
       <div className="entity-actions">
+        <div className="entity-toolbar">
+          <button onClick={handleBoost} disabled={boostLoading || !items.length}>
+            <Volume2 size={16} /> Усилить громкость всех
+          </button>
+        </div>
         <div className="add-manual">
           <input
             placeholder="Название"

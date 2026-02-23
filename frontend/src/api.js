@@ -2,9 +2,9 @@ const API =
   import.meta.env.DEV ? "http://localhost:8000/api" : "/api";
 const BASE = import.meta.env.DEV ? "http://localhost:8000" : "";
 
-/** Заголовки авторизации для админки (X-Admin-Key) */
+/** Заголовки авторизации для админки (X-Admin-Key). localStorage — сохраняется при перезагрузке. */
 function authHeaders() {
-  const k = sessionStorage.getItem("admin_api_key");
+  const k = localStorage.getItem("admin_api_key");
   return k ? { "X-Admin-Key": k } : {};
 }
 
@@ -12,7 +12,7 @@ function authHeaders() {
 async function apiFetch(url, opts = {}) {
   const r = await fetch(url, { ...opts, headers: { ...opts.headers, ...authHeaders() } });
   if (r.status === 401) {
-    sessionStorage.removeItem("admin_api_key");
+    localStorage.removeItem("admin_api_key");
     window.dispatchEvent(new CustomEvent("admin-unauth"));
   }
   return r;
@@ -25,14 +25,19 @@ export async function checkAuth(key = "") {
     body: JSON.stringify({ key: key.trim() }),
   });
   const data = await r.json();
+  if (r.status === 429) {
+    const e = new Error(data.detail || "Слишком много попыток");
+    e.status = 429;
+    throw e;
+  }
   if (r.ok && data.ok && key.trim()) {
-    sessionStorage.setItem("admin_api_key", key.trim());
+    localStorage.setItem("admin_api_key", key.trim());
   }
   return data;
 }
 
 export function hasStoredAdminKey() {
-  return !!sessionStorage.getItem("admin_api_key");
+  return !!localStorage.getItem("admin_api_key");
 }
 
 /** Текущая дата по Москве (UTC+3) в формате YYYY-MM-DD */
@@ -358,6 +363,11 @@ export async function deletePodcast(podcastId) {
   return r.json();
 }
 
+export async function applyPodcastVolumeBoost() {
+  const r = await apiFetch(`${API}/podcasts/apply-volume-boost`, { method: "POST" });
+  return r.json();
+}
+
 export async function getIntros() {
   const r = await apiFetch(`${API}/intros`);
   return r.json();
@@ -373,6 +383,11 @@ export async function createIntro(title, file) {
 
 export async function deleteIntro(introId) {
   const r = await apiFetch(`${API}/intros/${introId}`, { method: "DELETE" });
+  return r.json();
+}
+
+export async function applyIntroVolumeBoost() {
+  const r = await apiFetch(`${API}/intros/apply-volume-boost`, { method: "POST" });
   return r.json();
 }
 

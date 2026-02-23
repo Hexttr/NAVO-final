@@ -500,6 +500,8 @@ def get_broadcast(
     d: date = Query(..., description="Date YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
+    from services.streamer_service import moscow_date, moscow_seconds_now
+
     items = (
         db.query(BroadcastItem)
         .filter(BroadcastItem.broadcast_date == d)
@@ -524,7 +526,10 @@ def get_broadcast(
         else:
             rec["text"] = None
         result.append(rec)
-    return {"date": str(d), "items": result}
+    out = {"date": str(d), "items": result}
+    if d == moscow_date():
+        out["server_time"] = time_str(*sec_to_hms(moscow_seconds_now()))
+    return out
 
 
 @router.delete("")

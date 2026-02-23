@@ -34,14 +34,18 @@ export default function AdminAuthGate({ children }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
-    const res = await checkAuth(keyInput);
-    if (res.ok && res.auth_required) {
-      setNeedsAuth(false);
-      window.location.reload();
-    } else if (res.ok && !res.auth_required) {
-      setNeedsAuth(false);
-    } else {
-      setError("Неверный ключ");
+    try {
+      const res = await checkAuth(keyInput);
+      if (res.ok && res.auth_required) {
+        setNeedsAuth(false);
+      } else if (res.ok && !res.auth_required) {
+        setNeedsAuth(false);
+      } else {
+        setError("Неверный ключ");
+      }
+    } catch (err) {
+      const msg = err?.message || "";
+      setError(msg.includes("Слишком много") ? "Слишком много попыток. Подождите минуту." : (msg || "Неверный ключ"));
     }
   };
 

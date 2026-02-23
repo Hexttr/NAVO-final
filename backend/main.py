@@ -4,7 +4,8 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Query
+from collections import defaultdict
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger("navo")
@@ -119,16 +120,44 @@ async def _admin_auth_middleware(request, call_next):
 from starlette.middleware.base import BaseHTTPMiddleware
 app.add_middleware(BaseHTTPMiddleware, dispatch=_admin_auth_middleware)
 
+# Rate limit для /api/auth/check: 5 неверных попыток в минуту с IP
+_auth_failures: dict[str, list[float]] = defaultdict(list)
+_AUTH_RATE_LIMIT = 5
+_AUTH_WINDOW_SEC = 60
+
+
+def _record_auth_failure(ip: str) -> None:
+    now = time.time()
+    fails = _auth_failures[ip]
+    fails[:] = [t for t in fails if now - t < _AUTH_WINDOW_SEC]
+    fails.append(now)
+
+
+def _check_auth_rate_limit(ip: str) -> None:
+    """Проверить, не заблокирован ли IP после многих неверных попыток."""
+    now = time.time()
+    fails = _auth_failures[ip]
+    fails[:] = [t for t in fails if now - t < _AUTH_WINDOW_SEC]
+    if len(fails) >= _AUTH_RATE_LIMIT:
+        raise HTTPException(429, "Слишком много неверных попыток. Подождите минуту.")
+
+
 # Auth check (публичный) — для входа в админку
 @app.post("/api/auth/check")
-def auth_check(data: dict = Body(default_factory=dict)):
-    """Проверить API-ключ. Вернуть {ok: true} при совпадении."""
+def auth_check(request: Request, data: dict = Body(default_factory=dict)):
+    """Проверить API-ключ. Rate limit: 5 неверных попыток/мин с IP."""
     key = getattr(settings, "admin_api_key", "") or ""
     if not key:
         return {"ok": True, "auth_required": False}
+    ip = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        ip = forwarded.split(",")[0].strip()
+    _check_auth_rate_limit(ip)
     provided = (data.get("key") or "").strip()
     if provided == key:
         return {"ok": True, "auth_required": True}
+    _record_auth_failure(ip)
     raise HTTPException(401, "Неверный ключ")
 
 app.include_router(admin_router, prefix="/api")

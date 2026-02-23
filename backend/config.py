@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     weather_api_key: str = ""
     tts_provider: str = "edge-tts"
     tts_rate: str = "+25%"  # скорость: +20% быстрее, -50% медленнее
-    tts_volume: str = "+0%"  # громкость: +50% громче, -50% тише
+    tts_volume: str = "+0%"  # громкость TTS (DJ, новости, погода): +50% громче, -50% тише
     tts_pitch: str = "+0Hz"  # тон: +50Hz выше, -50Hz ниже
     elevenlabs_api_key: str | None = Field(default=None, validation_alias="ELEVENLABS_API_KEY")
     database_url: str = "sqlite:///./navo.db"
@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     upload_max_bytes: int = 52428800  # 50 MB
     # API-ключ админки. Пусто = без авторизации (dev).
     admin_api_key: str = ""
+    # Усиление громкости подкастов и интро при загрузке. 1.0 = без изменений, 1.5 ≈ +3.5 dB
+    podcast_intro_volume_boost: float = 1.0
 
     class Config:
         env_file = str(_env_path)

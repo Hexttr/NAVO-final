@@ -305,10 +305,10 @@ export default function Settings() {
         <section className="settings-section">
           <h3>Шаблон эфира</h3>
           <p className="settings-hint">
-            Фиксированные слоты: час, минута, тип. Слоты сортируются по времени. Интро — в конце каждого часа.
+            Фиксированные слоты: час, минута, тип. Интро — по времени (каждый час) или каждые N слотов.
           </p>
           <div className="broadcast-intro-row">
-            <label>Интро в минуту:</label>
+            <label>Интро каждый час, в минуту:</label>
             <input
               type="number"
               min={0}
@@ -317,11 +317,33 @@ export default function Settings() {
               onChange={(e) =>
                 setData((d) => ({
                   ...d,
-                  broadcast_intro_minute: parseInt(e.target.value, 10) || 55,
+                  broadcast_intro_minute: parseInt(e.target.value, 10) ?? 55,
                 }))
               }
               className="settings-number"
             />
+            <span className="settings-hint" style={{ marginLeft: 8 }}>(если «каждые N слотов» = 0)</span>
+          </div>
+          <div className="broadcast-intro-row" style={{ marginTop: 8 }}>
+            <label>Интро каждые N слотов:</label>
+            <select
+              value={String(data.broadcast_intro_every_n_slots ?? 0)}
+              onChange={(e) =>
+                setData((d) => ({
+                  ...d,
+                  broadcast_intro_every_n_slots: parseInt(e.target.value, 10) || 0,
+                }))
+              }
+              className="settings-select"
+              style={{ width: "auto" }}
+            >
+              <option value="0">0 — каждый час (по минуте выше)</option>
+              <option value="3">3 — каждые 3 слота</option>
+              <option value="5">5 — каждые 5 слотов</option>
+              <option value="10">10 — каждые 10 слотов</option>
+              <option value="15">15 — каждые 15 слотов</option>
+              <option value="20">20 — каждые 20 слотов</option>
+            </select>
           </div>
           <div className="broadcast-slots-grid">
             <div className="broadcast-slots-header">

@@ -356,10 +356,12 @@ export default function Broadcast() {
     if (items.length === 0) return 0;
     const nowSec = nowPlaying.currentTime
       ? parseTimeToSeconds(nowPlaying.currentTime)
-      : (() => {
-          const d = new Date(Date.now() + 3 * 3600 * 1000);
-          return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
-        })();
+      : data?.server_time
+        ? parseTimeToSeconds(data.server_time)
+        : (() => {
+            const d = new Date(Date.now() + 3 * 3600 * 1000);
+            return d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+          })();
     if (isToday && nowPlaying.entityType != null && nowPlaying.entityId != null) {
       const candidates = items
         .map((i, idx) => ({ i, idx }))
